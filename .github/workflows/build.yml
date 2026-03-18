@@ -1,0 +1,40 @@
+name: Build Android APK
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # သင်ကိုယ်တိုင် Manual နှိပ်ပြီး APK ထုတ်ခိုင်းလို့ရအောင်ပါ
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 အဆင့် (၁) - Code များကို ရယူခြင်း
+        uses: actions/checkout@v4
+
+      - name: ☕ အဆင့် (၂) - Java စနစ် တပ်ဆင်ခြင်း (Android အတွက်)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: 🐦 အဆင့် (၃) - Flutter နောက်ဆုံးဗားရှင်း တပ်ဆင်ခြင်း
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: 📦 အဆင့် (၄) - လိုအပ်သော Packages များ သွင်းခြင်း
+        run: flutter pub get
+
+      - name: 🛠️ အဆင့် (၅) - APK ဖိုင် တည်ဆောက်ခြင်း
+        run: flutter build apk --release
+
+      - name: 📤 အဆင့် (၆) - ထွက်လာသော APK ကို သိမ်းဆည်းပေးခြင်း
+        uses: actions/upload-artifact@v4
+        with:
+          name: Real-Estate-CRM-APK
+          path: build/app/outputs/flutter-apk/app-release.apk
+          
