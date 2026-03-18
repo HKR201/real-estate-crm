@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'dart:convert';
-import 'package:url_launcher/url_launcher.dart'; // <--- မြေပုံဖွင့်ရန်
-import '../db/database_helper.dart';
+import 'package:url_launcher/url_launcher.dart'; 
 import '../screens/property_form_screen.dart'; 
-import '../screens/owner_form_screen.dart';
+import '../screens/owner_list_screen.dart'; // <--- Owner List ကို ချိတ်ဆက်လိုက်သည်
 
 class PropertyMiniCard extends StatelessWidget {
   final Map<String, dynamic> property; 
@@ -12,19 +10,6 @@ class PropertyMiniCard extends StatelessWidget {
   final VoidCallback onEditCompleted;
 
   const PropertyMiniCard({super.key, required this.property, this.isSynced = false, required this.onDelete, required this.onEditCompleted});
-
-  void _editOwnerDetails(BuildContext context) async {
-    final ownerId = property['owner_id'];
-    if (ownerId == null || ownerId.toString().isEmpty) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ဤအိမ်ခြံမြေအတွက် ပိုင်ရှင် ချိတ်ဆက်ထားခြင်း မရှိပါ'))); return; }
-    final db = await DatabaseHelper.instance.database;
-    final result = await db.query('crm_owners', where: 'id = ?', whereArgs: [ownerId]);
-    if (!context.mounted) return;
-    if (result.isNotEmpty) {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => OwnerFormScreen(editData: result.first)));
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ပိုင်ရှင် အချက်အလက် ရှာမတွေ့ပါ')));
-    }
-  }
 
   void _showExpandedCard(BuildContext context) {
     showModalBottomSheet(
@@ -48,7 +33,6 @@ class PropertyMiniCard extends StatelessWidget {
                   IconButton(
                     icon: const Icon(Icons.map, color: Colors.blue), 
                     onPressed: () async {
-                      // မြေပုံလင့်ခ်ကို url_launcher ဖြင့်ဖွင့်မည်
                       final mapLink = property['map_link'];
                       if (mapLink != null && mapLink.toString().isNotEmpty) {
                         final Uri url = Uri.parse(mapLink.toString());
@@ -67,7 +51,23 @@ class PropertyMiniCard extends StatelessWidget {
               Text('${property['east_ft'] ?? 0} | ${property['west_ft'] ?? 0} | ${property['south_ft'] ?? 0} | ${property['north_ft'] ?? 0}', style: const TextStyle(fontSize: 16, letterSpacing: 2.0)), const SizedBox(height: 24),
               Row(
                 children: [
-                  Expanded(child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Colors.white), onPressed: () { Navigator.pop(bottomSheetContext); _editOwnerDetails(context); }, child: const Text('OWNER', style: TextStyle(fontWeight: FontWeight.bold)))), const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Colors.white), 
+                      onPressed: () { 
+                        Navigator.pop(bottomSheetContext); // ကတ်ကို အရင်ပိတ်မည်
+                        
+                        final ownerId = property['owner_id'];
+                        if (ownerId == null || ownerId.toString().isEmpty) { 
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(behavior: SnackBarBehavior.floating, content: Text('ဤအိမ်ခြံမြေအတွက် ပိုင်ရှင် ချိတ်ဆက်ထားခြင်း မရှိပါ'))); 
+                          return; 
+                        }
+                        // --- Owner List သို့ Redirect လုပ်မည် (ပိုင်ရှင်ကို အရောင်ခြယ်ပြမည်) ---
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => OwnerListScreen(highlightOwnerId: ownerId)));
+                      }, 
+                      child: const Text('OWNER', style: TextStyle(fontWeight: FontWeight.bold))
+                    )
+                  ), const SizedBox(width: 12),
                   Expanded(child: OutlinedButton(style: OutlinedButton.styleFrom(side: BorderSide(color: Theme.of(context).colorScheme.primary)), onPressed: () async { Navigator.pop(bottomSheetContext); final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => PropertyFormScreen(editData: property))); if (result == true) onEditCompleted(); }, child: Text('Edit', style: TextStyle(color: Theme.of(context).colorScheme.primary)))), const SizedBox(width: 12),
                   IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red), onPressed: () { Navigator.pop(bottomSheetContext); onDelete(); })
                 ],
