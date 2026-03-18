@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import '../db/database_helper.dart';
 
 class PropertyMiniCard extends StatelessWidget {
   final Map<String, dynamic> property; 
   final bool isSynced;
-  final VoidCallback onDelete; // အသစ်တိုးလိုက်သော ဖျက်ရန် လမ်းကြောင်း
+  final VoidCallback onDelete;
 
   const PropertyMiniCard({
     super.key,
@@ -11,6 +13,68 @@ class PropertyMiniCard extends StatelessWidget {
     this.isSynced = false,
     required this.onDelete,
   });
+
+  // ပိုင်ရှင် အချက်အလက်ကို Database မှ ဆွဲထုတ်၍ ပြသမည်
+  void _showOwnerDetails(BuildContext context) async {
+    final ownerId = property['owner_id'];
+    
+    // ပိုင်ရှင် ချိတ်ဆက်ထားခြင်း မရှိလျှင်
+    if (ownerId == null || ownerId.toString().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ဤအိမ်ခြံမြေအတွက် ပိုင်ရှင် ချိတ်ဆက်ထားခြင်း မရှိပါ')));
+      return;
+    }
+
+    final db = await DatabaseHelper.instance.database;
+    final result = await db.query('crm_owners', where: 'id = ?', whereArgs: [ownerId]);
+
+    if (!context.mounted) return;
+
+    if (result.isNotEmpty) {
+      final owner = result.first;
+      List<dynamic> phones = [];
+      try { phones = jsonDecode(owner['phones'] as String); } catch (_) {}
+
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          title: Row(
+            children: [
+              Icon(Icons.person, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 8),
+              const Text('ပိုင်ရှင် အချက်အလက်', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('အမည်: ${owner['name']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 12),
+              const Text('ဖုန်းနံပါတ်များ:', style: TextStyle(color: Colors.grey)),
+              const SizedBox(height: 4),
+              Text(phones.isEmpty ? 'မရှိပါ' : phones.join(', '), style: const TextStyle(fontSize: 15)),
+              
+              if ((owner['remark'] ?? '').toString().isNotEmpty) ...[
+                const SizedBox(height: 12),
+                const Text('မှတ်ချက်:', style: TextStyle(color: Colors.grey)),
+                const SizedBox(height: 4),
+                Text(owner['remark'].toString(), style: const TextStyle(fontSize: 14)),
+              ]
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('ပိတ်မည်'),
+            )
+          ],
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ပိုင်ရှင် အချက်အလက် ရှာမတွေ့ပါ')));
+    }
+  }
 
   void _showExpandedCard(BuildContext context) {
     showModalBottomSheet(
@@ -20,6 +84,10 @@ class PropertyMiniCard extends StatelessWidget {
       builder: (context) {
         final formattedPrice = (property['asking_price_lakhs'] ?? 0)
             .toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
+        
+        // အိမ်အမျိုးအစား ရှိမရှိ စစ်ဆေးမည်
+        final houseType = property['house_type'];
+        final hasHouse = houseType != null && houseType.toString().isNotEmpty;
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 24, top: 12, left: 16, right: 16),
@@ -27,9 +95,7 @@ class PropertyMiniCard extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Center(
-                child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
-              ),
+              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
               const SizedBox(height: 16),
               Container(
                 height: 180, width: double.infinity,
@@ -44,7 +110,11 @@ class PropertyMiniCard extends StatelessWidget {
                   IconButton(icon: const Icon(Icons.map, color: Colors.blue), onPressed: () {})
                 ],
               ),
-              Text('${property['land_type'] ?? '-'} • ${property['road_type'] ?? '-'}', style: const TextStyle(fontSize: 14, color: Colors.grey)),
+              // အိမ်အမျိုးအစားပါလျှင် ထည့်ပြမည်
+              Text(hasHouse 
+                  ? '${property['land_type'] ?? '-'} • ${property['road_type'] ?? '-'} • $houseType'
+                  : '${property['land_type'] ?? '-'} • ${property['road_type'] ?? '-'}', 
+                  style: const TextStyle(fontSize: 14, color: Colors.grey)),
               const SizedBox(height: 16),
               Text('$formattedPrice သိန်း', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
               const SizedBox(height: 8),
@@ -55,7 +125,7 @@ class PropertyMiniCard extends StatelessWidget {
                   Expanded(
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Colors.white),
-                      onPressed: () {}, 
+                      onPressed: () => _showOwnerDetails(context), // OWNER ကို နှိပ်လျှင် အပေါ်က Function ကို ခေါ်မည်
                       child: const Text('OWNER', style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
@@ -68,12 +138,11 @@ class PropertyMiniCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  // ဤနေရာရှိ ကြက်ခြေခတ် ✕ ကို အသက်သွင်းလိုက်ပါပြီ
                   IconButton(
                     icon: const Icon(Icons.close, color: Colors.red),
                     onPressed: () {
-                      Navigator.pop(context); // Bottom Sheet ကို အရင်ပိတ်မည်
-                      onDelete(); // Main.dart မှ ဖျက်မည့် Function ကို ခေါ်မည်
+                      Navigator.pop(context); 
+                      onDelete(); 
                     },
                   )
                 ],
@@ -97,8 +166,9 @@ class PropertyMiniCard extends StatelessWidget {
     final north = property['north_ft'] ?? 0;
 
     final bool isAvailable = status.toLowerCase() == 'available';
-    final Color statusBgColor = isAvailable ? const Color(0xFFE6F4EA) : Colors.grey.shade200;
-    final Color statusTextColor = isAvailable ? const Color(0xFF137333) : Colors.grey.shade700;
+    // Status အရောင်များကို သတ်မှတ်ခြင်း
+    final Color statusBgColor = status.toLowerCase() == 'sold out' ? Colors.red.shade50 : isAvailable ? const Color(0xFFE6F4EA) : Colors.orange.shade50;
+    final Color statusTextColor = status.toLowerCase() == 'sold out' ? Colors.red : isAvailable ? const Color(0xFF137333) : Colors.orange.shade800;
     final String formattedPrice = askingPriceLakhs.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
 
     return InkWell(
