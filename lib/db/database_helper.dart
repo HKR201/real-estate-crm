@@ -96,7 +96,6 @@ class DatabaseHelper {
     ''');
   }
 
-  // --- Properties ---
   Future<int> insertProperty(Map<String, dynamic> row) async {
     Database db = await instance.database;
     return await db.insert('crm_properties', row);
@@ -107,7 +106,6 @@ class DatabaseHelper {
     return await db.query('crm_properties', where: 'is_deleted = ?', whereArgs: [0], orderBy: 'created_at DESC');
   }
 
-  // --- Metadata ---
   Future<List<String>> getMetadata(String category) async {
     Database db = await instance.database;
     final result = await db.query('crm_metadata', where: 'category = ?', whereArgs: [category], orderBy: 'value ASC');
@@ -127,7 +125,6 @@ class DatabaseHelper {
     }
   }
 
-  // --- Owners ---
   Future<int> insertOwner(Map<String, dynamic> row) async {
     Database db = await instance.database;
     return await db.insert('crm_owners', row);
@@ -138,9 +135,6 @@ class DatabaseHelper {
     return await db.query('crm_owners', where: 'is_deleted = ?', whereArgs: [0], orderBy: 'created_at DESC');
   }
 
-  // ========================================================
-  // --- Buyers (ဝယ်လက်စာရင်း အသစ်ထည့်သည့်စနစ်) ---
-  // ========================================================
   Future<int> insertBuyer(Map<String, dynamic> row) async {
     Database db = await instance.database;
     return await db.insert('crm_buyers', row);
@@ -149,6 +143,30 @@ class DatabaseHelper {
   Future<List<Map<String, dynamic>>> getAllBuyers() async {
     Database db = await instance.database;
     return await db.query('crm_buyers', where: 'is_deleted = ?', whereArgs: [0], orderBy: 'created_at DESC');
+  }
+
+  // ========================================================
+  // --- အမှိုက်ပုံးထဲသို့ ခေတ္တပို့ခြင်း နှင့် ပြန်ယူခြင်း (Soft Delete) ---
+  // ========================================================
+  
+  Future<void> moveToRecycleBin(String tableName, String id) async {
+    Database db = await instance.database;
+    await db.update(
+      tableName, 
+      {'is_deleted': 1, 'updated_at': DateTime.now().toIso8601String()}, 
+      where: 'id = ?', 
+      whereArgs: [id]
+    );
+  }
+
+  Future<void> restoreFromRecycleBin(String tableName, String id) async {
+    Database db = await instance.database;
+    await db.update(
+      tableName, 
+      {'is_deleted': 0, 'updated_at': DateTime.now().toIso8601String()}, 
+      where: 'id = ?', 
+      whereArgs: [id]
+    );
   }
 
   Future close() async {
