@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'widgets/property_mini_card.dart'; // ခုနကရေးထားသော Card ဖိုင်ကို လှမ်းချိတ်ခြင်း
 
-// သင်၏ Supabase URL နှင့် Key များကို ဤနေရာတွင် အစားထိုးပါ။
 const String supabaseUrl = 'YOUR_SUPABASE_URL';
 const String supabaseAnonKey = 'YOUR_SUPABASE_ANON_KEY';
 
@@ -81,15 +81,12 @@ class _MainDashboardState extends State<MainDashboard> {
         automaticallyImplyLeading: false, 
         title: const Text('CRM Dashboard', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
-          // ရှာဖွေရေး ခလုတ် (Search)
           IconButton(
             icon: const Icon(Icons.search),
             onPressed: () {},
           ),
-          // မှတ်ချက် - AppBar တွင် actions ထည့်ထားသောကြောင့် Flutter သည် ညာဘက်တွင် default menu icon ကို အလိုအလျောက် ထည့်ပေးတော့မည်မဟုတ်ပါ။
         ],
       ),
-      // ဤနေရာတွင် drawer အစား endDrawer သို့ ပြောင်းလဲလိုက်ပါသည် (ညာဘက်မှ ထွက်လာရန်)
       endDrawer: Drawer(
         child: ListView(
           padding: EdgeInsets.zero,
@@ -121,12 +118,31 @@ class _MainDashboardState extends State<MainDashboard> {
           ],
         ),
       ),
-      body: Center(
-        child: Text(
-          _currentIndex == 0 ? 'Home (Listing) ဖော်ပြမည့်နေရာ' : 'Buyer (ဝယ်လက်) ဖော်ပြမည့်နေရာ',
-          style: const TextStyle(fontSize: 18),
-        ),
-      ),
+      // ဤနေရာတွင် Home Tab ဖြစ်ပါက Card လေးများကို ပြသပါမည်
+      body: _currentIndex == 0
+          ? ListView.builder(
+              padding: const EdgeInsets.only(top: 8, bottom: 80), // အောက်ခြေ ခလုတ်နှင့် မကပ်ရန်
+              itemCount: 5, // နမူနာ အိမ် ၅ လုံး ပြထားပါမည်
+              itemBuilder: (context, index) {
+                return PropertyMiniCard(
+                  title: 'လှိုင်မြို့နယ်ရှိ 2RC လုံးချင်းအိမ်သစ် ${index + 1}',
+                  askingPriceLakhs: 1500 + (index * 500), // ဈေးနှုန်း အပြောင်းအလဲလေး ဖြစ်အောင်
+                  location: 'လှိုင်မြို့နယ်',
+                  status: index % 2 == 0 ? 'Available' : 'Sold Out',
+                  east: 40,
+                  west: 40,
+                  south: 60,
+                  north: 60,
+                  isSynced: index != 2, // တချို့ကတ်များကို Sync မလုပ်ရသေးသကဲ့သို့ ပြရန်
+                );
+              },
+            )
+          : const Center(
+              child: Text(
+                'Buyer (ဝယ်လက်) ဖော်ပြမည့်နေရာ',
+                style: TextStyle(fontSize: 18),
+              ),
+            ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Theme.of(context).colorScheme.onPrimary,
@@ -137,7 +153,6 @@ class _MainDashboardState extends State<MainDashboard> {
         selectedIndex: _currentIndex == 2 ? 0 : _currentIndex, 
         onDestinationSelected: (index) {
           if (index == 2) {
-            // Option ကိုနှိပ်လျှင် ညာဘက်မှ Drawer ပွင့်လာစေရန် openEndDrawer ကို ပြောင်းသုံးထားပါသည်
             _scaffoldKey.currentState?.openEndDrawer(); 
           } else {
             setState(() {
