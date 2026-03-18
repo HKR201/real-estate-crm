@@ -10,7 +10,7 @@ import 'screens/owner_list_screen.dart';
 import 'screens/buyer_form_screen.dart'; 
 import 'screens/recycle_bin_screen.dart'; 
 import 'db/database_helper.dart';
-import 'utils/time_helper.dart'; // <--- အချိန်ဖိုင်ကို ချိတ်ဆက်သည်
+import 'utils/time_helper.dart'; 
 
 const String supabaseUrl = 'YOUR_SUPABASE_URL';
 const String supabaseAnonKey = 'YOUR_SUPABASE_ANON_KEY';
@@ -55,13 +55,13 @@ class _MainDashboardState extends State<MainDashboard> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
-  // --- ဤနေရာတွင် Category အသစ်များကို လိုသလို ထပ်တိုးနိုင်ပါသည် ---
+  // --- သင် သတ်မှတ်ပေးထားသော Categories များ ---
   final Map<String, String> _filterCategories = {
-    'status': 'Status (အခြေအနေ)',
+    'asking_price_lakhs': 'ခေါ်ဈေးနှုန်း',
     'location_id': 'မြို့နယ်/တည်နေရာ',
-    'property_base_type': 'အမျိုးအစား (မြေ/အိမ်)',
-    'house_type': 'အိမ်အမျိုးအစား', // <--- သင်ပြောထားသော အိမ်အမျိုးအစားကို ကိုယ်တိုင် ထည့်သွင်းပေးထားပါသည်
-    'land_type': 'မြေအမျိုးအစား'
+    'road_type': 'လမ်းအမျိုးအစား',
+    'land_type': 'မြေအမျိုးအစား',
+    'status': 'Status'
   };
   String? _selectedFilterCategory;
   String? _selectedFilterValue;
@@ -89,11 +89,12 @@ class _MainDashboardState extends State<MainDashboard> {
     setState(() => _properties.removeWhere((p) => p['id'] == property['id']));
     await DatabaseHelper.instance.moveToRecycleBin('crm_properties', property['id']);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).clearSnackBars(); 
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(behavior: SnackBarBehavior.floating, margin: const EdgeInsets.only(bottom: 80, left: 16, right: 16), content: const Text('အိမ်ခြံမြေစာရင်းကို ဖျက်လိုက်ပါပြီ'), duration: const Duration(seconds: 4), action: SnackBarAction(label: 'Undo (ပြန်ယူမည်)', textColor: Colors.yellow, onPressed: () async { await DatabaseHelper.instance.restoreFromRecycleBin('crm_properties', property['id']); _loadProperties(); })));
     
-    // --- Android ၏ Accessibility Setting ကြောင့် မပျောက်သော ပြဿနာကို အတင်းအကျပ် ဖြေရှင်းခြင်း ---
-    Future.delayed(const Duration(seconds: 4), () {
+    // ၃ စက္ကန့် စနစ်
+    ScaffoldMessenger.of(context).clearSnackBars(); 
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(behavior: SnackBarBehavior.floating, margin: const EdgeInsets.only(bottom: 80, left: 16, right: 16), content: const Text('အိမ်ခြံမြေစာရင်းကို ဖျက်လိုက်ပါပြီ'), duration: const Duration(seconds: 3), action: SnackBarAction(label: 'Undo (ပြန်ယူမည်)', textColor: Colors.yellow, onPressed: () async { await DatabaseHelper.instance.restoreFromRecycleBin('crm_properties', property['id']); _loadProperties(); })));
+    
+    Future.delayed(const Duration(seconds: 3), () {
       if (mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar();
     });
   }
@@ -102,11 +103,12 @@ class _MainDashboardState extends State<MainDashboard> {
     setState(() => _buyers.removeWhere((b) => b['id'] == buyer['id']));
     await DatabaseHelper.instance.moveToRecycleBin('crm_buyers', buyer['id']);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(behavior: SnackBarBehavior.floating, margin: const EdgeInsets.only(bottom: 80, left: 16, right: 16), content: const Text('ဝယ်လက်စာရင်းကို ဖျက်လိုက်ပါပြီ'), duration: const Duration(seconds: 4), action: SnackBarAction(label: 'Undo (ပြန်ယူမည်)', textColor: Colors.yellow, onPressed: () async { await DatabaseHelper.instance.restoreFromRecycleBin('crm_buyers', buyer['id']); _loadBuyers(); })));
     
-    // --- အတင်းအကျပ် ဖျောက်ချခြင်း ---
-    Future.delayed(const Duration(seconds: 4), () {
+    // ၃ စက္ကန့် စနစ်
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(behavior: SnackBarBehavior.floating, margin: const EdgeInsets.only(bottom: 80, left: 16, right: 16), content: const Text('ဝယ်လက်စာရင်းကို ဖျက်လိုက်ပါပြီ'), duration: const Duration(seconds: 3), action: SnackBarAction(label: 'Undo (ပြန်ယူမည်)', textColor: Colors.yellow, onPressed: () async { await DatabaseHelper.instance.restoreFromRecycleBin('crm_buyers', buyer['id']); _loadBuyers(); })));
+    
+    Future.delayed(const Duration(seconds: 3), () {
       if (mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar();
     });
   }
@@ -114,11 +116,22 @@ class _MainDashboardState extends State<MainDashboard> {
   void _onFilterCategoryChanged(String? categoryKey) async {
     setState(() { _selectedFilterCategory = categoryKey; _selectedFilterValue = null; _currentSubFilterValues = []; });
 
-    if (categoryKey == 'status') { _currentSubFilterValues = ['Available', 'Pending', 'Sold Out']; } 
-    else if (categoryKey == 'property_base_type') { _currentSubFilterValues = ['မြေကွက်သီးသန့်', 'အိမ်ပါသည်']; } 
-    else if (categoryKey == 'location_id') { _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('location'); } 
-    else if (categoryKey == 'land_type') { _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('land_type'); }
-    else if (categoryKey == 'house_type') { _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('house_type'); } // <--- Category အသစ် Database မှ ဆွဲထုတ်ရန်
+    if (categoryKey == 'status') { 
+      _currentSubFilterValues = ['Available', 'Pending', 'Sold Out']; 
+    } 
+    else if (categoryKey == 'asking_price_lakhs') { 
+      // ဈေးနှုန်းအတွက် Range များ ထည့်ပေးထားပါသည်
+      _currentSubFilterValues = ['သိန်း ၁၀၀၀ အောက်', 'သိန်း ၁၀၀၀ မှ ၃၀၀၀', 'သိန်း ၃၀၀၀ မှ ၅၀၀၀', 'သိန်း ၅၀၀၀ အထက်']; 
+    } 
+    else if (categoryKey == 'location_id') { 
+      _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('location'); 
+    } 
+    else if (categoryKey == 'road_type') { 
+      _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('road_type'); 
+    }
+    else if (categoryKey == 'land_type') { 
+      _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('land_type'); 
+    }
     setState(() {}); 
   }
 
@@ -138,7 +151,7 @@ class _MainDashboardState extends State<MainDashboard> {
         appBar: AppBar(
           automaticallyImplyLeading: false, 
           title: _isSearching && _currentIndex == 1 
-              ? TextField(controller: _searchController, autofocus: true, decoration: const InputDecoration(hintText: 'ဝယ်လက်ရှာဖွေရန်...', border: InputBorder.none), onChanged: (val) => setState(() => _searchQuery = val))
+              ? TextField(controller: _searchController, autofocus: true, decoration: const InputDecoration(hintText: 'အမည်, နေရာ, ဈေးနှုန်း ရှာရန်...', border: InputBorder.none), onChanged: (val) => setState(() => _searchQuery = val))
               : const Text('CRM Dashboard', style: TextStyle(fontWeight: FontWeight.bold)), 
           actions: [ if (_currentIndex == 1) IconButton(icon: Icon(_isSearching ? Icons.close : Icons.search), onPressed: () { setState(() { _isSearching = !_isSearching; if (!_isSearching) { _searchQuery = ''; _searchController.clear(); } }); }) ]
         ),
@@ -168,12 +181,17 @@ class _MainDashboardState extends State<MainDashboard> {
   Widget _buildHomeTab() {
     if (_isLoading) return const Center(child: CircularProgressIndicator());
     List<Map<String, dynamic>> filteredProperties = _properties;
+    
+    // စစ်ထုတ်သည့် စနစ်
     if (_selectedFilterCategory != null && _selectedFilterValue != null) {
       filteredProperties = _properties.where((p) {
-        if (_selectedFilterCategory == 'property_base_type') {
-          final hType = p['house_type'];
-          final isHouse = hType != null && hType.toString().isNotEmpty;
-          return (isHouse ? 'အိမ်ပါသည်' : 'မြေကွက်သီးသန့်') == _selectedFilterValue;
+        if (_selectedFilterCategory == 'asking_price_lakhs') {
+          int price = p['asking_price_lakhs'] ?? 0;
+          if (_selectedFilterValue == 'သိန်း ၁၀၀၀ အောက်') return price < 1000;
+          if (_selectedFilterValue == 'သိန်း ၁၀၀၀ မှ ၃၀၀၀') return price >= 1000 && price <= 3000;
+          if (_selectedFilterValue == 'သိန်း ၃၀၀၀ မှ ၅၀၀၀') return price > 3000 && price <= 5000;
+          if (_selectedFilterValue == 'သိန်း ၅၀၀၀ အထက်') return price > 5000;
+          return false;
         }
         return p[_selectedFilterCategory] == _selectedFilterValue;
       }).toList();
@@ -202,7 +220,16 @@ class _MainDashboardState extends State<MainDashboard> {
 
   Widget _buildBuyerTab() {
     if (_isLoadingBuyers) return const Center(child: CircularProgressIndicator());
-    final filteredBuyers = _searchQuery.isEmpty ? _buyers : _buyers.where((b) => (b['name'] ?? '').toString().toLowerCase().contains(_searchQuery.toLowerCase()) || (b['preferred_location'] ?? '').toString().toLowerCase().contains(_searchQuery.toLowerCase())).toList();
+    
+    // --- နေရာ၊ နာမည်၊ ဈေးနှုန်း (၃) မျိုးလုံးဖြင့် ရှာနိုင်ရန် ပြင်ထားသည် ---
+    final filteredBuyers = _searchQuery.isEmpty 
+        ? _buyers 
+        : _buyers.where((b) => 
+            (b['name'] ?? '').toString().toLowerCase().contains(_searchQuery.toLowerCase()) || 
+            (b['preferred_location'] ?? '').toString().toLowerCase().contains(_searchQuery.toLowerCase()) ||
+            (b['budget_lakhs'] ?? '').toString().contains(_searchQuery)
+          ).toList();
+
     if (filteredBuyers.isEmpty) return Center(child: Text(_searchQuery.isEmpty ? 'ဝယ်လက်စာရင်း မရှိသေးပါ။\nအပေါင်း (+) ကိုနှိပ်၍ ထည့်ပါ။' : 'ရှာဖွေမှုရလဒ် မတွေ့ပါ', textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)));
 
     return ListView.builder(
@@ -211,7 +238,7 @@ class _MainDashboardState extends State<MainDashboard> {
         final buyer = filteredBuyers[index];
         List<dynamic> phones = []; try { phones = jsonDecode(buyer['phones'] ?? '[]'); } catch (_) {}
         final budget = (buyer['budget_lakhs'] ?? 0).toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
-        final relativeTime = TimeHelper.getRelativeTime(buyer['updated_at']); // <--- Buyer Card အတွက် အချိန်
+        final relativeTime = TimeHelper.getRelativeTime(buyer['updated_at']); 
 
         return Card(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -224,7 +251,7 @@ class _MainDashboardState extends State<MainDashboard> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Expanded(child: Text(buyer['name'] ?? 'အမည်မသိ', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
-                    Text(relativeTime, style: const TextStyle(fontSize: 11, color: Colors.grey)), // <--- အမည်ဘေးတွင် အချိန်ပြမည်
+                    Text(relativeTime, style: const TextStyle(fontSize: 11, color: Colors.grey)), 
                     const SizedBox(width: 8),
                     IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20), onPressed: () => _deleteBuyer(buyer), constraints: const BoxConstraints(), padding: EdgeInsets.zero)
                   ],
