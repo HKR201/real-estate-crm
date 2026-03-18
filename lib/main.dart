@@ -3,7 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'widgets/property_mini_card.dart';
 import 'screens/property_form_screen.dart';
-import 'db/database_helper.dart'; 
+import 'screens/owner_list_screen.dart'; // ပိုင်ရှင်စာရင်း စာမျက်နှာကို လှမ်းချိတ်ခြင်း
+import 'db/database_helper.dart';
 
 const String supabaseUrl = 'YOUR_SUPABASE_URL';
 const String supabaseAnonKey = 'YOUR_SUPABASE_ANON_KEY';
@@ -106,7 +107,15 @@ class _MainDashboardState extends State<MainDashboard> {
                 decoration: BoxDecoration(color: Color(0xFF008080)),
                 child: Text('Options', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
               ),
-              ListTile(leading: const Icon(Icons.people), title: const Text('Owner List'), onTap: () {}),
+              // ပိုင်ရှင်စာရင်း ခလုတ်
+              ListTile(
+                leading: const Icon(Icons.people), 
+                title: const Text('Owner List'), 
+                onTap: () {
+                  Navigator.pop(context); // Drawer ကို အရင်ပိတ်မည်
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => const OwnerListScreen()));
+                }
+              ),
               ListTile(leading: const Icon(Icons.cloud_sync), title: const Text('Cloud Sync (Manual)'), onTap: () {}),
               ListTile(leading: const Icon(Icons.delete_outline, color: Colors.red), title: const Text('Recycle Bin'), onTap: () {}),
               ListTile(leading: const Icon(Icons.settings), title: const Text('Settings'), onTap: () {}),
@@ -122,7 +131,6 @@ class _MainDashboardState extends State<MainDashboard> {
                         padding: const EdgeInsets.only(top: 8, bottom: 80), 
                         itemCount: _properties.length, 
                         itemBuilder: (context, index) {
-                          // ဤနေရာတွင် Code ပြောင်းသွားပါသည် (prop တစ်ခုလုံးကို ပို့လိုက်သည်)
                           return PropertyMiniCard(
                             property: _properties[index],
                             isSynced: false, 
