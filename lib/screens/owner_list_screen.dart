@@ -5,7 +5,7 @@ import '../db/database_helper.dart';
 import 'owner_form_screen.dart';
 
 class OwnerListScreen extends StatefulWidget {
-  final String? highlightOwnerId; // <--- Redirect လုပ်လာပါက ပြသမည့် ပိုင်ရှင် ID
+  final String? highlightOwnerId; 
   const OwnerListScreen({super.key, this.highlightOwnerId});
 
   @override
@@ -29,12 +29,19 @@ class _OwnerListScreenState extends State<OwnerListScreen> {
     setState(() => _owners.removeWhere((o) => o['id'] == owner['id']));
     await DatabaseHelper.instance.moveToRecycleBin('crm_owners', owner['id']);
     if (!mounted) return;
+    
+    // --- ယခင် Snackbar များကို ရှင်းလင်းပြီး ၃ စက္ကန့်ဖြင့် အတင်းဖျောက်မည့်စနစ် ---
+    ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      behavior: SnackBarBehavior.floating, // <--- Floating ဖြစ်အောင် ပြင်ထားသည်
+      behavior: SnackBarBehavior.floating, 
       content: const Text('ပိုင်ရှင်စာရင်းကို ဖျက်လိုက်ပါပြီ'), 
-      duration: const Duration(seconds: 4), 
+      duration: const Duration(seconds: 3), // ၃ စက္ကန့် သတ်မှတ်ထားသည်
       action: SnackBarAction(label: 'Undo (ပြန်ယူမည်)', textColor: Colors.yellow, onPressed: () async { await DatabaseHelper.instance.restoreFromRecycleBin('crm_owners', owner['id']); _loadOwners(); })
     ));
+
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    });
   }
 
   @override
@@ -51,11 +58,10 @@ class _OwnerListScreenState extends State<OwnerListScreen> {
                     final owner = _owners[index];
                     List<dynamic> phones = []; try { phones = jsonDecode(owner['phones'] ?? '[]'); } catch (_) {}
                     
-                    // Highlight လုပ်ရမည့် ပိုင်ရှင်ဖြစ်မဖြစ် စစ်ဆေးခြင်း
                     final isHighlighted = owner['id'] == widget.highlightOwnerId;
 
                     return Card(
-                      color: isHighlighted ? Theme.of(context).colorScheme.primaryContainer : null, // <--- Highlight အရောင်ပြောင်းမည်
+                      color: isHighlighted ? Theme.of(context).colorScheme.primaryContainer : null, 
                       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), elevation: isHighlighted ? 4 : 1,
                       child: ListTile(
                         leading: CircleAvatar(backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1), child: Icon(Icons.person, color: Theme.of(context).colorScheme.primary)),
