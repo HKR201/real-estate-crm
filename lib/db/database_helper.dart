@@ -28,26 +28,36 @@ class DatabaseHelper {
     await db.execute('''CREATE TABLE crm_sync_logs (id TEXT PRIMARY KEY, last_sync_time TEXT NOT NULL, status TEXT, details TEXT)''');
   }
 
-  // Insert & Get
+  // Insert, Get & Update (Active Records)
   Future<int> insertProperty(Map<String, dynamic> row) async { Database db = await instance.database; return await db.insert('crm_properties', row); }
   Future<List<Map<String, dynamic>>> getAllProperties() async { Database db = await instance.database; return await db.query('crm_properties', where: 'is_deleted = ?', whereArgs: [0], orderBy: 'created_at DESC'); }
-  Future<List<String>> getMetadata(String category) async { Database db = await instance.database; final result = await db.query('crm_metadata', where: 'category = ?', whereArgs: [category], orderBy: 'value ASC'); return result.map((e) => e['value'] as String).toList(); }
-  Future<void> insertMetadata(String category, String value) async { Database db = await instance.database; final existing = await db.query('crm_metadata', where: 'category = ? AND value = ?', whereArgs: [category, value]); if (existing.isEmpty) { await db.insert('crm_metadata', {'id': const Uuid().v4(), 'category': category, 'value': value, 'created_at': DateTime.now().toIso8601String()}); } }
+  Future<int> updateProperty(Map<String, dynamic> row) async { Database db = await instance.database; return await db.update('crm_properties', row, where: 'id = ?', whereArgs: [row['id']]); }
+
   Future<int> insertOwner(Map<String, dynamic> row) async { Database db = await instance.database; return await db.insert('crm_owners', row); }
   Future<List<Map<String, dynamic>>> getAllOwners() async { Database db = await instance.database; return await db.query('crm_owners', where: 'is_deleted = ?', whereArgs: [0], orderBy: 'created_at DESC'); }
+  Future<int> updateOwner(Map<String, dynamic> row) async { Database db = await instance.database; return await db.update('crm_owners', row, where: 'id = ?', whereArgs: [row['id']]); }
+
   Future<int> insertBuyer(Map<String, dynamic> row) async { Database db = await instance.database; return await db.insert('crm_buyers', row); }
   Future<List<Map<String, dynamic>>> getAllBuyers() async { Database db = await instance.database; return await db.query('crm_buyers', where: 'is_deleted = ?', whereArgs: [0], orderBy: 'created_at DESC'); }
+  Future<int> updateBuyer(Map<String, dynamic> row) async { Database db = await instance.database; return await db.update('crm_buyers', row, where: 'id = ?', whereArgs: [row['id']]); }
 
-  // Soft Delete
+  // Metadata
+  Future<List<String>> getMetadata(String category) async { Database db = await instance.database; final result = await db.query('crm_metadata', where: 'category = ?', whereArgs: [category], orderBy: 'value ASC'); return result.map((e) => e['value'] as String).toList(); }
+  Future<void> insertMetadata(String category, String value) async { Database db = await instance.database; final existing = await db.query('crm_metadata', where: 'category = ? AND value = ?', whereArgs: [category, value]); if (existing.isEmpty) { await db.insert('crm_metadata', {'id': const Uuid().v4(), 'category': category, 'value': value, 'created_at': DateTime.now().toIso8601String()}); } }
+
+  // ========================================================
+  // --- အမှိုက်ပုံး (Recycle Bin) အတွက် လုပ်ဆောင်ချက်များ ---
+  // ========================================================
   Future<void> moveToRecycleBin(String tableName, String id) async { Database db = await instance.database; await db.update(tableName, {'is_deleted': 1, 'updated_at': DateTime.now().toIso8601String()}, where: 'id = ?', whereArgs: [id]); }
   Future<void> restoreFromRecycleBin(String tableName, String id) async { Database db = await instance.database; await db.update(tableName, {'is_deleted': 0, 'updated_at': DateTime.now().toIso8601String()}, where: 'id = ?', whereArgs: [id]); }
 
-  // ========================================================
-  // --- အသစ်တိုးလိုက်သော Edit / Update လုပ်မည့် Functions များ ---
-  // ========================================================
-  Future<int> updateProperty(Map<String, dynamic> row) async { Database db = await instance.database; return await db.update('crm_properties', row, where: 'id = ?', whereArgs: [row['id']]); }
-  Future<int> updateOwner(Map<String, dynamic> row) async { Database db = await instance.database; return await db.update('crm_owners', row, where: 'id = ?', whereArgs: [row['id']]); }
-  Future<int> updateBuyer(Map<String, dynamic> row) async { Database db = await instance.database; return await db.update('crm_buyers', row, where: 'id = ?', whereArgs: [row['id']]); }
+  // ဖျက်ထားသော ဒေတာများကို ဆွဲထုတ်ရန် (is_deleted = 1)
+  Future<List<Map<String, dynamic>>> getDeletedProperties() async { Database db = await instance.database; return await db.query('crm_properties', where: 'is_deleted = ?', whereArgs: [1], orderBy: 'updated_at DESC'); }
+  Future<List<Map<String, dynamic>>> getDeletedOwners() async { Database db = await instance.database; return await db.query('crm_owners', where: 'is_deleted = ?', whereArgs: [1], orderBy: 'updated_at DESC'); }
+  Future<List<Map<String, dynamic>>> getDeletedBuyers() async { Database db = await instance.database; return await db.query('crm_buyers', where: 'is_deleted = ?', whereArgs: [1], orderBy: 'updated_at DESC'); }
+
+  // အပြီးတိုင် ဖျက်ပစ်ရန်
+  Future<void> permanentlyDelete(String tableName, String id) async { Database db = await instance.database; await db.delete(tableName, where: 'id = ?', whereArgs: [id]); }
 
   Future close() async { final db = await instance.database; db.close(); }
 }
