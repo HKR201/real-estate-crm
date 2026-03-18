@@ -55,7 +55,6 @@ class _MainDashboardState extends State<MainDashboard> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
-  // --- သင် သတ်မှတ်ပေးထားသော Categories များ ---
   final Map<String, String> _filterCategories = {
     'asking_price_lakhs': 'ခေါ်ဈေးနှုန်း',
     'location_id': 'မြို့နယ်/တည်နေရာ',
@@ -66,12 +65,20 @@ class _MainDashboardState extends State<MainDashboard> {
   String? _selectedFilterCategory;
   String? _selectedFilterValue;
   List<String> _currentSubFilterValues = [];
+  
+  // --- ဈေးနှုန်းရိုက်ထည့်ရန် သီးသန့် Controller (အသစ်) ---
+  final TextEditingController _priceFilterController = TextEditingController();
 
   @override
   void initState() { super.initState(); _loadProperties(); _loadBuyers(); }
 
   @override
-  void dispose() { _pageController.dispose(); _searchController.dispose(); super.dispose(); }
+  void dispose() { 
+    _pageController.dispose(); 
+    _searchController.dispose(); 
+    _priceFilterController.dispose();
+    super.dispose(); 
+  }
 
   Future<void> _loadProperties() async {
     setState(() => _isLoading = true);
@@ -89,49 +96,34 @@ class _MainDashboardState extends State<MainDashboard> {
     setState(() => _properties.removeWhere((p) => p['id'] == property['id']));
     await DatabaseHelper.instance.moveToRecycleBin('crm_properties', property['id']);
     if (!mounted) return;
-    
-    // ၃ စက္ကန့် စနစ်
     ScaffoldMessenger.of(context).clearSnackBars(); 
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(behavior: SnackBarBehavior.floating, margin: const EdgeInsets.only(bottom: 80, left: 16, right: 16), content: const Text('အိမ်ခြံမြေစာရင်းကို ဖျက်လိုက်ပါပြီ'), duration: const Duration(seconds: 3), action: SnackBarAction(label: 'Undo (ပြန်ယူမည်)', textColor: Colors.yellow, onPressed: () async { await DatabaseHelper.instance.restoreFromRecycleBin('crm_properties', property['id']); _loadProperties(); })));
-    
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    });
+    Future.delayed(const Duration(seconds: 3), () { if (mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar(); });
   }
 
   void _deleteBuyer(Map<String, dynamic> buyer) async {
     setState(() => _buyers.removeWhere((b) => b['id'] == buyer['id']));
     await DatabaseHelper.instance.moveToRecycleBin('crm_buyers', buyer['id']);
     if (!mounted) return;
-    
-    // ၃ စက္ကန့် စနစ်
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(behavior: SnackBarBehavior.floating, margin: const EdgeInsets.only(bottom: 80, left: 16, right: 16), content: const Text('ဝယ်လက်စာရင်းကို ဖျက်လိုက်ပါပြီ'), duration: const Duration(seconds: 3), action: SnackBarAction(label: 'Undo (ပြန်ယူမည်)', textColor: Colors.yellow, onPressed: () async { await DatabaseHelper.instance.restoreFromRecycleBin('crm_buyers', buyer['id']); _loadBuyers(); })));
-    
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    });
+    Future.delayed(const Duration(seconds: 3), () { if (mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar(); });
   }
 
   void _onFilterCategoryChanged(String? categoryKey) async {
-    setState(() { _selectedFilterCategory = categoryKey; _selectedFilterValue = null; _currentSubFilterValues = []; });
+    setState(() { 
+      _selectedFilterCategory = categoryKey; 
+      _selectedFilterValue = null; 
+      _currentSubFilterValues = []; 
+      _priceFilterController.clear(); // Category ပြောင်းလျှင် ဂဏန်းအဟောင်းကို ဖျက်မည်
+    });
 
-    if (categoryKey == 'status') { 
-      _currentSubFilterValues = ['Available', 'Pending', 'Sold Out']; 
-    } 
-    else if (categoryKey == 'asking_price_lakhs') { 
-      // ဈေးနှုန်းအတွက် Range များ ထည့်ပေးထားပါသည်
-      _currentSubFilterValues = ['သိန်း ၁၀၀၀ အောက်', 'သိန်း ၁၀၀၀ မှ ၃၀၀၀', 'သိန်း ၃၀၀၀ မှ ၅၀၀၀', 'သိန်း ၅၀၀၀ အထက်']; 
-    } 
-    else if (categoryKey == 'location_id') { 
-      _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('location'); 
-    } 
-    else if (categoryKey == 'road_type') { 
-      _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('road_type'); 
-    }
-    else if (categoryKey == 'land_type') { 
-      _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('land_type'); 
-    }
+    if (categoryKey == 'status') { _currentSubFilterValues = ['Available', 'Pending', 'Sold Out']; } 
+    else if (categoryKey == 'location_id') { _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('location'); } 
+    else if (categoryKey == 'road_type') { _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('road_type'); }
+    else if (categoryKey == 'land_type') { _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('land_type'); }
+    // asking_price_lakhs အတွက် Sub-filter dropdown မလိုတော့ပါ။ TextField သုံးမည်။
+    
     setState(() {}); 
   }
 
@@ -183,17 +175,20 @@ class _MainDashboardState extends State<MainDashboard> {
     List<Map<String, dynamic>> filteredProperties = _properties;
     
     // စစ်ထုတ်သည့် စနစ်
-    if (_selectedFilterCategory != null && _selectedFilterValue != null) {
+    if (_selectedFilterCategory != null) {
       filteredProperties = _properties.where((p) {
+        // ခေါ်ဈေးနှုန်း ဖြစ်ခဲ့လျှင် (ဂဏန်းရိုက်ထည့်၍ အောက်ရှိသည်များကို စစ်မည်)
         if (_selectedFilterCategory == 'asking_price_lakhs') {
+          int maxPrice = int.tryParse(_priceFilterController.text) ?? 0;
+          if (maxPrice == 0) return true; // ဘာမှ မရိုက်ရသေးလျှင် အကုန်ပြမည်
           int price = p['asking_price_lakhs'] ?? 0;
-          if (_selectedFilterValue == 'သိန်း ၁၀၀၀ အောက်') return price < 1000;
-          if (_selectedFilterValue == 'သိန်း ၁၀၀၀ မှ ၃၀၀၀') return price >= 1000 && price <= 3000;
-          if (_selectedFilterValue == 'သိန်း ၃၀၀၀ မှ ၅၀၀၀') return price > 3000 && price <= 5000;
-          if (_selectedFilterValue == 'သိန်း ၅၀၀၀ အထက်') return price > 5000;
-          return false;
+          return price <= maxPrice; // ရိုက်ထည့်ဂဏန်းထက် ငယ်/ညီမျှ သော အိမ်များကိုသာ ပြမည်
         }
-        return p[_selectedFilterCategory] == _selectedFilterValue;
+        // အခြား Category များဖြစ်ခဲ့လျှင်
+        if (_selectedFilterValue != null) {
+          return p[_selectedFilterCategory] == _selectedFilterValue;
+        }
+        return true;
       }).toList();
     }
 
@@ -204,8 +199,22 @@ class _MainDashboardState extends State<MainDashboard> {
           child: Row(
             children: [
               Expanded(flex: 5, child: DropdownButtonHideUnderline(child: DropdownButton<String>(isExpanded: true, hint: const Text('Filter By', style: TextStyle(fontWeight: FontWeight.bold)), value: _selectedFilterCategory, icon: const Icon(Icons.filter_list, size: 20), items: _filterCategories.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value, style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis))).toList(), onChanged: _onFilterCategoryChanged))), const SizedBox(width: 8), Container(width: 1, height: 24, color: Colors.grey.shade300), const SizedBox(width: 8),
-              Expanded(flex: 5, child: DropdownButtonHideUnderline(child: DropdownButton<String>(isExpanded: true, hint: const Text('ရွေးချယ်ရန်'), value: _selectedFilterValue, items: _currentSubFilterValues.map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis))).toList(), onChanged: _selectedFilterCategory == null ? null : (val) => setState(() => _selectedFilterValue = val)))),
-              if (_selectedFilterCategory != null) IconButton(icon: const Icon(Icons.cancel, color: Colors.grey, size: 20), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: () => setState(() { _selectedFilterCategory = null; _selectedFilterValue = null; _currentSubFilterValues = []; }))
+              
+              // --- ဈေးနှုန်းဖြစ်ပါက ဂဏန်းရိုက်သည့်အကွက်ပြမည် / မဟုတ်ပါက Dropdown ပြမည် ---
+              Expanded(
+                flex: 5, 
+                child: _selectedFilterCategory == 'asking_price_lakhs'
+                  ? TextField(
+                      controller: _priceFilterController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(hintText: 'အများဆုံး (သိန်း)', border: InputBorder.none, isDense: true, contentPadding: EdgeInsets.zero),
+                      onChanged: (val) => setState(() {}), // ရိုက်လိုက်သည်နှင့် အလိုလို Filter လုပ်မည်
+                    )
+                  : DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(isExpanded: true, hint: const Text('ရွေးချယ်ရန်'), value: _selectedFilterValue, items: _currentSubFilterValues.map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis))).toList(), onChanged: _selectedFilterCategory == null ? null : (val) => setState(() => _selectedFilterValue = val))
+                    ),
+              ),
+              if (_selectedFilterCategory != null) IconButton(icon: const Icon(Icons.cancel, color: Colors.grey, size: 20), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: () => setState(() { _selectedFilterCategory = null; _selectedFilterValue = null; _currentSubFilterValues = []; _priceFilterController.clear(); }))
             ],
           ),
         ),
@@ -221,14 +230,19 @@ class _MainDashboardState extends State<MainDashboard> {
   Widget _buildBuyerTab() {
     if (_isLoadingBuyers) return const Center(child: CircularProgressIndicator());
     
-    // --- နေရာ၊ နာမည်၊ ဈေးနှုန်း (၃) မျိုးလုံးဖြင့် ရှာနိုင်ရန် ပြင်ထားသည် ---
+    // --- နေရာ၊ နာမည်၊ ဂဏန်းရိုက်ပါက ထိုဈေးအောက်ရှိသော ဘတ်ဂျက် (၃) မျိုးလုံးဖြင့် ရှာနိုင်ရန် ---
+    final parsedBudget = int.tryParse(_searchQuery);
     final filteredBuyers = _searchQuery.isEmpty 
         ? _buyers 
-        : _buyers.where((b) => 
-            (b['name'] ?? '').toString().toLowerCase().contains(_searchQuery.toLowerCase()) || 
-            (b['preferred_location'] ?? '').toString().toLowerCase().contains(_searchQuery.toLowerCase()) ||
-            (b['budget_lakhs'] ?? '').toString().contains(_searchQuery)
-          ).toList();
+        : _buyers.where((b) {
+            final matchText = (b['name'] ?? '').toString().toLowerCase().contains(_searchQuery.toLowerCase()) || 
+                              (b['preferred_location'] ?? '').toString().toLowerCase().contains(_searchQuery.toLowerCase());
+            // ဂဏန်းရိုက်ထည့်ထားပါက ဘတ်ဂျက် <= ရိုက်ထားသောဂဏန်း စစ်မည်
+            if (parsedBudget != null) {
+              return matchText || ((b['budget_lakhs'] ?? 0) <= parsedBudget);
+            }
+            return matchText;
+          }).toList();
 
     if (filteredBuyers.isEmpty) return Center(child: Text(_searchQuery.isEmpty ? 'ဝယ်လက်စာရင်း မရှိသေးပါ။\nအပေါင်း (+) ကိုနှိပ်၍ ထည့်ပါ။' : 'ရှာဖွေမှုရလဒ် မတွေ့ပါ', textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)));
 
