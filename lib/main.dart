@@ -95,7 +95,6 @@ class _MainDashboardState extends State<MainDashboard> {
     });
   }
 
-  // --- အိမ်ခြံမြေစာရင်း ဖျက်မည့် Function အသစ် ---
   void _deleteProperty(Map<String, dynamic> property) async {
     setState(() {
       _properties.removeWhere((p) => p['id'] == property['id']);
@@ -231,7 +230,8 @@ class _MainDashboardState extends State<MainDashboard> {
         return PropertyMiniCard(
           property: _properties[index], 
           isSynced: false,
-          onDelete: () => _deleteProperty(_properties[index]), // ဤနေရာတွင် Property အတွက် ဖျက်မည့် Function ချိတ်ဆက်လိုက်ပါသည်
+          onDelete: () => _deleteProperty(_properties[index]), 
+          onEditCompleted: () => _loadProperties(), // ဤနေရာတွင် Error ရှင်းထုတ်ပြီးပါပြီ
         );
       },
     );
@@ -265,7 +265,7 @@ class _MainDashboardState extends State<MainDashboard> {
                   children: [
                     Text(buyer['name'] ?? 'အမည်မသိ', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     IconButton(
-                      icon: const Icon(Icons.close, color: Colors.red, size: 20),
+                      icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20), // ကြက်ခြေခတ်အစား အမှိုက်ပုံး ပြောင်းထားသည်
                       onPressed: () => _deleteBuyer(buyer),
                       constraints: const BoxConstraints(),
                       padding: EdgeInsets.zero,
@@ -284,7 +284,7 @@ class _MainDashboardState extends State<MainDashboard> {
                 Align(
                   alignment: Alignment.centerRight,
                   child: OutlinedButton(
-                    onPressed: () {},
+                    onPressed: () {}, // အပိုင်း (၂) တွင် Edit ချိတ်ပါမည်
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
                       minimumSize: const Size(60, 30),
