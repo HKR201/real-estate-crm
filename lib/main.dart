@@ -1,286 +1,231 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'dart:convert'; 
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart'; 
+import 'package:uuid/uuid.dart';
+import 'dart:convert';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart'; // <--- Folder ရှာရန်
+import 'package:path/path.dart' as path; // <--- ဖိုင်နာမည်ကို ကိုင်တွယ်ရန်
 
-import 'widgets/property_mini_card.dart';
-import 'screens/property_form_screen.dart';
-import 'screens/owner_list_screen.dart';
-import 'screens/buyer_form_screen.dart'; 
-import 'screens/recycle_bin_screen.dart'; 
-import 'db/database_helper.dart';
-import 'utils/time_helper.dart'; 
+import '../db/database_helper.dart';
+import '../widgets/dynamic_dropdown.dart';
+import 'owner_form_screen.dart'; 
 
-const String supabaseUrl = 'YOUR_SUPABASE_URL';
-const String supabaseAnonKey = 'YOUR_SUPABASE_ANON_KEY';
-
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
-  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(systemNavigationBarColor: Colors.transparent, statusBarColor: Colors.transparent));
-  runApp(const RealEstateCrmApp());
+class PropertyFormScreen extends StatefulWidget {
+  final Map<String, dynamic>? editData; 
+  const PropertyFormScreen({super.key, this.editData});
+  @override
+  State<PropertyFormScreen> createState() => _PropertyFormScreenState();
 }
 
-class RealEstateCrmApp extends StatelessWidget {
-  const RealEstateCrmApp({super.key});
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(title: 'Real Estate CRM', debugShowCheckedModeBanner: false, themeMode: ThemeMode.system, theme: _buildTheme(Brightness.light), darkTheme: _buildTheme(Brightness.dark), home: const MainDashboard());
-  }
-  ThemeData _buildTheme(Brightness brightness) {
-    final isDark = brightness == Brightness.dark;
-    return ThemeData(useMaterial3: true, brightness: brightness, colorScheme: ColorScheme.fromSeed(seedColor: isDark ? const Color(0xFF4DB6AC) : const Color(0xFF008080), brightness: brightness, surface: isDark ? const Color(0xFF1E2626) : const Color(0xFFFFFFFF)), scaffoldBackgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F8F8), cardTheme: CardThemeData(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), elevation: 2), inputDecorationTheme: InputDecorationTheme(border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))));
-  }
-}
+class _PropertyFormScreenState extends State<PropertyFormScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _uuid = const Uuid();
 
-class MainDashboard extends StatefulWidget {
-  const MainDashboard({super.key});
-  @override
-  State<MainDashboard> createState() => _MainDashboardState();
-}
+  final _titleController = TextEditingController();
+  final _askingPriceController = TextEditingController();
+  final _bottomPriceController = TextEditingController();
+  final _eastController = TextEditingController();
+  final _westController = TextEditingController();
+  final _southController = TextEditingController();
+  final _northController = TextEditingController();
+  final _remarkController = TextEditingController();
+  final _mapLinkController = TextEditingController(); 
 
-class _MainDashboardState extends State<MainDashboard> {
-  int _currentIndex = 0;
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>(); 
-  final PageController _pageController = PageController(); 
+  String? _location;
+  String? _roadType;
+  String? _landType;
+  String? _houseType; 
+  String _status = 'Available'; 
+  String? _propertyBaseType; 
+  String? _selectedOwnerId;
+  String? _selectedOwnerName;
 
-  List<Map<String, dynamic>> _properties = [];
-  List<Map<String, dynamic>> _buyers = [];
-  bool _isLoading = true; 
-  bool _isLoadingBuyers = true;
-
-  bool _isSearching = false;
-  final TextEditingController _searchController = TextEditingController();
-  String _searchQuery = '';
-
-  final Map<String, String> _filterCategories = {
-    'asking_price_lakhs': 'ခေါ်ဈေးနှုန်း',
-    'location_id': 'မြို့နယ်/တည်နေရာ',
-    'road_type': 'လမ်းအမျိုးအစား',
-    'land_type': 'မြေအမျိုးအစား',
-    'status': 'Status'
-  };
-  String? _selectedFilterCategory;
-  String? _selectedFilterValue;
-  List<String> _currentSubFilterValues = [];
-  
-  // --- ဈေးနှုန်းရိုက်ထည့်ရန် သီးသန့် Controller (အသစ်) ---
-  final TextEditingController _priceFilterController = TextEditingController();
+  final ImagePicker _picker = ImagePicker();
+  List<String> _imagePaths = [];
 
   @override
-  void initState() { super.initState(); _loadProperties(); _loadBuyers(); }
+  void initState() {
+    super.initState();
+    if (widget.editData != null) {
+      final d = widget.editData!;
+      _titleController.text = d['title'] ?? '';
+      _askingPriceController.text = (d['asking_price_lakhs'] ?? '').toString();
+      _bottomPriceController.text = (d['bottom_price_lakhs'] ?? '').toString();
+      _eastController.text = (d['east_ft'] ?? '').toString();
+      _westController.text = (d['west_ft'] ?? '').toString();
+      _southController.text = (d['south_ft'] ?? '').toString();
+      _northController.text = (d['north_ft'] ?? '').toString();
+      _remarkController.text = d['remark'] ?? '';
+      _mapLinkController.text = d['map_link'] ?? '';
+      _status = d['status'] ?? 'Available';
+      _location = d['location_id'];
+      _roadType = d['road_type'];
+      _landType = d['land_type'];
+      _houseType = d['house_type'];
+      _propertyBaseType = (_houseType != null && _houseType!.isNotEmpty) ? 'အိမ်ပါသည်' : 'မြေကွက်သီးသန့်';
+      _selectedOwnerId = d['owner_id'];
+      if (_selectedOwnerId != null) _loadOwnerName(_selectedOwnerId!);
+      if (d['extra_data'] != null) {
+        try {
+          final extraData = jsonDecode(d['extra_data']);
+          if (extraData['photos'] != null) _imagePaths = List<String>.from(extraData['photos']);
+        } catch (_) {}
+      }
+    }
+  }
+
+  Future<void> _loadOwnerName(String id) async {
+    final db = await DatabaseHelper.instance.database;
+    final result = await db.query('crm_owners', where: 'id = ?', whereArgs: [id]);
+    if (result.isNotEmpty && mounted) setState(() => _selectedOwnerName = result.first['name'] as String);
+  }
 
   @override
-  void dispose() { 
-    _pageController.dispose(); 
-    _searchController.dispose(); 
-    _priceFilterController.dispose();
-    super.dispose(); 
+  void dispose() {
+    _titleController.dispose(); _askingPriceController.dispose(); _bottomPriceController.dispose();
+    _eastController.dispose(); _westController.dispose(); _southController.dispose();
+    _northController.dispose(); _remarkController.dispose(); _mapLinkController.dispose();
+    super.dispose();
   }
 
-  Future<void> _loadProperties() async {
-    setState(() => _isLoading = true);
-    final data = await DatabaseHelper.instance.getAllProperties();
-    setState(() { _properties = List<Map<String, dynamic>>.from(data); _isLoading = false; });
-  }
+  // --- ဓာတ်ပုံကို ရွေးပြီးတာနဲ့ App ရဲ့ အမြဲတမ်း သိမ်းမယ့်နေရာကို Copy ကူးမည့်စနစ် ---
+  Future<void> _pickImages() async {
+    final List<XFile> pickedFiles = await _picker.pickMultiImage();
+    if (pickedFiles.isEmpty) return;
 
-  Future<void> _loadBuyers() async {
-    setState(() => _isLoadingBuyers = true);
-    final data = await DatabaseHelper.instance.getAllBuyers();
-    setState(() { _buyers = List<Map<String, dynamic>>.from(data); _isLoadingBuyers = false; });
-  }
-
-  void _deleteProperty(Map<String, dynamic> property) async {
-    setState(() => _properties.removeWhere((p) => p['id'] == property['id']));
-    await DatabaseHelper.instance.moveToRecycleBin('crm_properties', property['id']);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).clearSnackBars(); 
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(behavior: SnackBarBehavior.floating, margin: const EdgeInsets.only(bottom: 80, left: 16, right: 16), content: const Text('အိမ်ခြံမြေစာရင်းကို ဖျက်လိုက်ပါပြီ'), duration: const Duration(seconds: 3), action: SnackBarAction(label: 'Undo (ပြန်ယူမည်)', textColor: Colors.yellow, onPressed: () async { await DatabaseHelper.instance.restoreFromRecycleBin('crm_properties', property['id']); _loadProperties(); })));
-    Future.delayed(const Duration(seconds: 3), () { if (mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar(); });
-  }
-
-  void _deleteBuyer(Map<String, dynamic> buyer) async {
-    setState(() => _buyers.removeWhere((b) => b['id'] == buyer['id']));
-    await DatabaseHelper.instance.moveToRecycleBin('crm_buyers', buyer['id']);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(behavior: SnackBarBehavior.floating, margin: const EdgeInsets.only(bottom: 80, left: 16, right: 16), content: const Text('ဝယ်လက်စာရင်းကို ဖျက်လိုက်ပါပြီ'), duration: const Duration(seconds: 3), action: SnackBarAction(label: 'Undo (ပြန်ယူမည်)', textColor: Colors.yellow, onPressed: () async { await DatabaseHelper.instance.restoreFromRecycleBin('crm_buyers', buyer['id']); _loadBuyers(); })));
-    Future.delayed(const Duration(seconds: 3), () { if (mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar(); });
-  }
-
-  void _onFilterCategoryChanged(String? categoryKey) async {
-    setState(() { 
-      _selectedFilterCategory = categoryKey; 
-      _selectedFilterValue = null; 
-      _currentSubFilterValues = []; 
-      _priceFilterController.clear(); // Category ပြောင်းလျှင် ဂဏန်းအဟောင်းကို ဖျက်မည်
-    });
-
-    if (categoryKey == 'status') { _currentSubFilterValues = ['Available', 'Pending', 'Sold Out']; } 
-    else if (categoryKey == 'location_id') { _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('location'); } 
-    else if (categoryKey == 'road_type') { _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('road_type'); }
-    else if (categoryKey == 'land_type') { _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('land_type'); }
-    // asking_price_lakhs အတွက် Sub-filter dropdown မလိုတော့ပါ။ TextField သုံးမည်။
+    final appDir = await getApplicationDocumentsDirectory();
+    final String photosDirPath = path.join(appDir.path, 'property_photos');
+    final photosDir = Directory(photosDirPath);
     
-    setState(() {}); 
-  }
+    if (!await photosDir.exists()) await photosDir.create(recursive: true);
 
-  @override
-  Widget build(BuildContext context) {
-    return PopScope(
-      canPop: false, 
-      onPopInvoked: (didPop) { 
-        if (didPop) return; 
-        if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) { Navigator.of(context).pop(); } 
-        else if (_isSearching) { setState(() { _isSearching = false; _searchQuery = ''; _searchController.clear(); }); } 
-        else if (_currentIndex != 0) { _pageController.animateToPage(0, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut); } 
-        else { SystemNavigator.pop(); } 
-      },
-      child: Scaffold(
-        key: _scaffoldKey,
-        appBar: AppBar(
-          automaticallyImplyLeading: false, 
-          title: _isSearching && _currentIndex == 1 
-              ? TextField(controller: _searchController, autofocus: true, decoration: const InputDecoration(hintText: 'အမည်, နေရာ, ဈေးနှုန်း ရှာရန်...', border: InputBorder.none), onChanged: (val) => setState(() => _searchQuery = val))
-              : const Text('CRM Dashboard', style: TextStyle(fontWeight: FontWeight.bold)), 
-          actions: [ if (_currentIndex == 1) IconButton(icon: Icon(_isSearching ? Icons.close : Icons.search), onPressed: () { setState(() { _isSearching = !_isSearching; if (!_isSearching) { _searchQuery = ''; _searchController.clear(); } }); }) ]
-        ),
-        endDrawer: Drawer(
-          child: ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              const DrawerHeader(decoration: BoxDecoration(color: Color(0xFF008080)), child: Text('Options', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold))),
-              ListTile(leading: const Icon(Icons.people), title: const Text('Owner List'), onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (context) => const OwnerListScreen())); }),
-              ListTile(leading: const Icon(Icons.cloud_sync), title: const Text('Cloud Sync (Manual)'), onTap: () {}),
-              ListTile(leading: const Icon(Icons.delete_outline, color: Colors.red), title: const Text('Recycle Bin'), onTap: () async { Navigator.pop(context); final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const RecycleBinScreen())); if (result == true) { _loadProperties(); _loadBuyers(); } }),
-              ListTile(leading: const Icon(Icons.settings), title: const Text('Settings'), onTap: () {}),
-            ],
-          ),
-        ),
-        body: PageView(controller: _pageController, onPageChanged: (index) { setState(() { _currentIndex = index; if (index == 0) { _isSearching = false; _searchQuery = ''; _searchController.clear(); } }); }, children: [ _buildHomeTab(), _buildBuyerTab() ]),
-        floatingActionButton: FloatingActionButton(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Theme.of(context).colorScheme.onPrimary, onPressed: () async { if (_currentIndex == 0) { final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const PropertyFormScreen())); if (result == true) _loadProperties(); } else if (_currentIndex == 1) { final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const BuyerFormScreen())); if (result == true) _loadBuyers(); } }, child: const Icon(Icons.add)),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: _currentIndex == 2 ? 0 : _currentIndex, 
-          onDestinationSelected: (index) { if (index == 2) { _scaffoldKey.currentState?.openEndDrawer(); } else { _pageController.animateToPage(index, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut); } },
-          destinations: const [NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'), NavigationDestination(icon: Icon(Icons.person_search_outlined), selectedIcon: Icon(Icons.person_search), label: 'Buyer'), NavigationDestination(icon: Icon(Icons.menu), label: 'Option')],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHomeTab() {
-    if (_isLoading) return const Center(child: CircularProgressIndicator());
-    List<Map<String, dynamic>> filteredProperties = _properties;
-    
-    // စစ်ထုတ်သည့် စနစ်
-    if (_selectedFilterCategory != null) {
-      filteredProperties = _properties.where((p) {
-        // ခေါ်ဈေးနှုန်း ဖြစ်ခဲ့လျှင် (ဂဏန်းရိုက်ထည့်၍ အောက်ရှိသည်များကို စစ်မည်)
-        if (_selectedFilterCategory == 'asking_price_lakhs') {
-          int maxPrice = int.tryParse(_priceFilterController.text) ?? 0;
-          if (maxPrice == 0) return true; // ဘာမှ မရိုက်ရသေးလျှင် အကုန်ပြမည်
-          int price = p['asking_price_lakhs'] ?? 0;
-          return price <= maxPrice; // ရိုက်ထည့်ဂဏန်းထက် ငယ်/ညီမျှ သော အိမ်များကိုသာ ပြမည်
-        }
-        // အခြား Category များဖြစ်ခဲ့လျှင်
-        if (_selectedFilterValue != null) {
-          return p[_selectedFilterCategory] == _selectedFilterValue;
-        }
-        return true;
-      }).toList();
+    List<String> newSavedPaths = [];
+    for (var xFile in pickedFiles) {
+      final String fileName = '${DateTime.now().millisecondsSinceEpoch}_${path.basename(xFile.path)}';
+      final String permanentPath = path.join(photosDirPath, fileName);
+      
+      // ပုံကို အမြဲတမ်း Folder ဆီသို့ Copy ကူးခြင်း
+      final File savedImage = await File(xFile.path).copy(permanentPath);
+      newSavedPaths.add(savedImage.path);
     }
 
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), color: Theme.of(context).cardColor,
-          child: Row(
-            children: [
-              Expanded(flex: 5, child: DropdownButtonHideUnderline(child: DropdownButton<String>(isExpanded: true, hint: const Text('Filter By', style: TextStyle(fontWeight: FontWeight.bold)), value: _selectedFilterCategory, icon: const Icon(Icons.filter_list, size: 20), items: _filterCategories.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value, style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis))).toList(), onChanged: _onFilterCategoryChanged))), const SizedBox(width: 8), Container(width: 1, height: 24, color: Colors.grey.shade300), const SizedBox(width: 8),
-              
-              // --- ဈေးနှုန်းဖြစ်ပါက ဂဏန်းရိုက်သည့်အကွက်ပြမည် / မဟုတ်ပါက Dropdown ပြမည် ---
-              Expanded(
-                flex: 5, 
-                child: _selectedFilterCategory == 'asking_price_lakhs'
-                  ? TextField(
-                      controller: _priceFilterController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(hintText: 'အများဆုံး (သိန်း)', border: InputBorder.none, isDense: true, contentPadding: EdgeInsets.zero),
-                      onChanged: (val) => setState(() {}), // ရိုက်လိုက်သည်နှင့် အလိုလို Filter လုပ်မည်
-                    )
-                  : DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(isExpanded: true, hint: const Text('ရွေးချယ်ရန်'), value: _selectedFilterValue, items: _currentSubFilterValues.map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis))).toList(), onChanged: _selectedFilterCategory == null ? null : (val) => setState(() => _selectedFilterValue = val))
-                    ),
-              ),
-              if (_selectedFilterCategory != null) IconButton(icon: const Icon(Icons.cancel, color: Colors.grey, size: 20), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: () => setState(() { _selectedFilterCategory = null; _selectedFilterValue = null; _currentSubFilterValues = []; _priceFilterController.clear(); }))
-            ],
-          ),
-        ),
-        Expanded(
-          child: filteredProperties.isEmpty
-              ? const Center(child: Text('ရှာဖွေမှုနှင့် ကိုက်ညီသော စာရင်းမရှိပါ', style: TextStyle(color: Colors.grey)))
-              : ListView.builder(padding: const EdgeInsets.only(top: 8, bottom: 80), itemCount: filteredProperties.length, itemBuilder: (context, index) { return PropertyMiniCard(property: filteredProperties[index], isSynced: false, onDelete: () => _deleteProperty(filteredProperties[index]), onEditCompleted: () => _loadProperties()); }),
-        ),
-      ],
-    );
+    setState(() => _imagePaths.addAll(newSavedPaths));
   }
 
-  Widget _buildBuyerTab() {
-    if (_isLoadingBuyers) return const Center(child: CircularProgressIndicator());
-    
-    // --- နေရာ၊ နာမည်၊ ဂဏန်းရိုက်ပါက ထိုဈေးအောက်ရှိသော ဘတ်ဂျက် (၃) မျိုးလုံးဖြင့် ရှာနိုင်ရန် ---
-    final parsedBudget = int.tryParse(_searchQuery);
-    final filteredBuyers = _searchQuery.isEmpty 
-        ? _buyers 
-        : _buyers.where((b) {
-            final matchText = (b['name'] ?? '').toString().toLowerCase().contains(_searchQuery.toLowerCase()) || 
-                              (b['preferred_location'] ?? '').toString().toLowerCase().contains(_searchQuery.toLowerCase());
-            // ဂဏန်းရိုက်ထည့်ထားပါက ဘတ်ဂျက် <= ရိုက်ထားသောဂဏန်း စစ်မည်
-            if (parsedBudget != null) {
-              return matchText || ((b['budget_lakhs'] ?? 0) <= parsedBudget);
-            }
-            return matchText;
-          }).toList();
+  void _removeImage(int index) {
+    setState(() => _imagePaths.removeAt(index));
+  }
 
-    if (filteredBuyers.isEmpty) return Center(child: Text(_searchQuery.isEmpty ? 'ဝယ်လက်စာရင်း မရှိသေးပါ။\nအပေါင်း (+) ကိုနှိပ်၍ ထည့်ပါ။' : 'ရှာဖွေမှုရလဒ် မတွေ့ပါ', textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)));
+  void _showOwnerSelectionSheet(BuildContext context) async {
+    List<Map<String, dynamic>> owners = await DatabaseHelper.instance.getAllOwners();
+    if (!context.mounted) return;
+    showModalBottomSheet(context: context, isScrollControlled: true, shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (context) => _OwnerSelectionSheet(initialOwners: owners, onOwnerSelected: (id, name) => setState(() { _selectedOwnerId = id; _selectedOwnerName = name; })));
+  }
 
-    return ListView.builder(
-      padding: const EdgeInsets.only(top: 8, bottom: 80), itemCount: filteredBuyers.length,
-      itemBuilder: (context, index) {
-        final buyer = filteredBuyers[index];
-        List<dynamic> phones = []; try { phones = jsonDecode(buyer['phones'] ?? '[]'); } catch (_) {}
-        final budget = (buyer['budget_lakhs'] ?? 0).toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
-        final relativeTime = TimeHelper.getRelativeTime(buyer['updated_at']); 
-
-        return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(child: Text(buyer['name'] ?? 'အမည်မသိ', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
-                    Text(relativeTime, style: const TextStyle(fontSize: 11, color: Colors.grey)), 
-                    const SizedBox(width: 8),
-                    IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20), onPressed: () => _deleteBuyer(buyer), constraints: const BoxConstraints(), padding: EdgeInsets.zero)
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text('$budget သိန်း • ${buyer['preferred_location']}', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 15)),
-                const SizedBox(height: 6),
-                if (phones.isNotEmpty) InkWell(onTap: () => launchUrl(Uri.parse('tel:${phones.first}')), child: Text(phones.join(', '), style: const TextStyle(color: Colors.blue, decoration: TextDecoration.underline))),
-                const SizedBox(height: 8),
-                Align(alignment: Alignment.centerRight, child: OutlinedButton(onPressed: () async { final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => BuyerFormScreen(editData: buyer))); if (result == true) _loadBuyers(); }, style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0), minimumSize: const Size(60, 30), side: BorderSide(color: Theme.of(context).colorScheme.primary)), child: Text('Edit', style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.primary))))
-              ],
-            ),
-          )
-        );
+  Future<void> _saveProperty() async {
+    if (_formKey.currentState!.validate()) {
+      Map<String, dynamic> extraData = {};
+      if (widget.editData != null && widget.editData!['extra_data'] != null) {
+        try { extraData = jsonDecode(widget.editData!['extra_data']); } catch (_) {}
       }
+      extraData['photos'] = _imagePaths;
+
+      final propertyData = {
+        'id': widget.editData?['id'] ?? _uuid.v4(),
+        'title': _titleController.text,
+        'asking_price_lakhs': int.tryParse(_askingPriceController.text) ?? 0,
+        'bottom_price_lakhs': int.tryParse(_bottomPriceController.text),
+        'status': _status, 
+        'east_ft': int.tryParse(_eastController.text),
+        'west_ft': int.tryParse(_westController.text),
+        'south_ft': int.tryParse(_southController.text),
+        'north_ft': int.tryParse(_northController.text),
+        'house_type': _propertyBaseType == 'အိမ်ပါသည်' ? _houseType : null, 
+        'road_type': _roadType,
+        'land_type': _landType,
+        'location_id': _location ?? 'မသိရ',
+        'owner_id': _selectedOwnerId,
+        'remark': _remarkController.text,
+        'map_link': _mapLinkController.text, 
+        'is_deleted': 0,
+        'extra_data': jsonEncode(extraData),
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      if (widget.editData == null) {
+        propertyData['created_at'] = DateTime.now().toIso8601String();
+        await DatabaseHelper.instance.insertProperty(propertyData);
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('အိမ်ခြံမြေစာရင်း အသစ် သိမ်းဆည်းပြီးပါပြီ')));
+      } else {
+        propertyData['created_at'] = widget.editData!['created_at']; 
+        await DatabaseHelper.instance.updateProperty(propertyData);
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('အိမ်ခြံမြေစာရင်း ပြင်ဆင်ပြီးပါပြီ')));
+      }
+      if (mounted) Navigator.pop(context, true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.editData == null ? 'အိမ်ခြံမြေ အသစ်ထည့်ရန်' : 'အိမ်ခြံမြေ ပြင်ဆင်ရန်', style: const TextStyle(fontWeight: FontWeight.bold)), leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.pop(context))),
+      body: Form(key: _formKey, child: ListView(padding: const EdgeInsets.all(16.0), children: [
+        TextFormField(controller: _titleController, decoration: const InputDecoration(labelText: 'ခေါင်းစဉ်', prefixIcon: Icon(Icons.title)), validator: (v) => v!.isEmpty ? 'ခေါင်းစဉ် ထည့်ပေးပါ' : null),
+        const SizedBox(height: 16),
+        DropdownButtonFormField<String>(value: _status, decoration: InputDecoration(labelText: 'Status', prefixIcon: const Icon(Icons.info_outline), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))), items: ['Available', 'Pending', 'Sold Out'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(), onChanged: (val) => setState(() => _status = val!)),
+        const SizedBox(height: 16),
+        Row(children: [Expanded(child: TextFormField(controller: _askingPriceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'ခေါ်ဈေး (သိန်း)'), validator: (v) => v!.isEmpty ? 'လိုအပ်ပါသည်' : null)), const SizedBox(width: 16), Expanded(child: TextFormField(controller: _bottomPriceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'အောက်ဆုံးဈေး (သိန်း)')))]),
+        const SizedBox(height: 16),
+        DynamicDropdown(label: 'မြို့နယ် / တည်နေရာ', category: 'location', selectedValue: _location, onChanged: (v) => setState(() => _location = v)),
+        const SizedBox(height: 16),
+        DropdownButtonFormField<String>(value: _propertyBaseType, decoration: InputDecoration(labelText: 'အမျိုးအစား', prefixIcon: const Icon(Icons.category), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))), items: ['မြေကွက်သီးသန့်', 'အိမ်ပါသည်'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(), onChanged: (v) => setState(() { _propertyBaseType = v; if (v == 'မြေကွက်သီးသန့်') _houseType = null; })),
+        const SizedBox(height: 16),
+        if (_propertyBaseType == 'အိမ်ပါသည်') ...[DynamicDropdown(label: 'အိမ်အမျိုးအစား', category: 'house_type', selectedValue: _houseType, onChanged: (v) => setState(() => _houseType = v)), const SizedBox(height: 16)],
+        Row(children: [Expanded(child: TextFormField(controller: _eastController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'အရှေ့'))), const SizedBox(width: 16), Expanded(child: TextFormField(controller: _westController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'အနောက်')))]), const SizedBox(height: 16),
+        Row(children: [Expanded(child: TextFormField(controller: _southController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'တောင်'))), const SizedBox(width: 16), Expanded(child: TextFormField(controller: _northController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'မြောက်')))]), const SizedBox(height: 16),
+        Row(children: [Expanded(child: DynamicDropdown(label: 'လမ်းအမျိုးအစား', category: 'road_type', selectedValue: _roadType, onChanged: (v) => setState(() => _roadType = v))), const SizedBox(width: 16), Expanded(child: DynamicDropdown(label: 'မြေအမျိုးအစား', category: 'land_type', selectedValue: _landType, onChanged: (v) => setState(() => _landType = v)))]), const SizedBox(height: 24),
+        InkWell(onTap: () => _showOwnerSelectionSheet(context), child: InputDecorator(decoration: InputDecoration(labelText: 'ပိုင်ရှင်', prefixIcon: const Icon(Icons.person), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))), child: Text(_selectedOwnerName ?? 'ပိုင်ရှင် ရွေးပါ', style: TextStyle(color: _selectedOwnerName == null ? Colors.grey : Colors.black)))),
+        const SizedBox(height: 16),
+        TextFormField(controller: _mapLinkController, decoration: const InputDecoration(labelText: 'မြေပုံလင့်ခ်', prefixIcon: Icon(Icons.map))),
+        const SizedBox(height: 24),
+        const Text('ဓာတ်ပုံများ', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)), const SizedBox(height: 8),
+        _imagePaths.isEmpty
+            ? InkWell(onTap: _pickImages, child: Container(height: 100, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade400)), child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.add_a_photo, color: Colors.grey, size: 32), Text('ဓာတ်ပုံများ ထည့်ရန်', style: TextStyle(color: Colors.grey))])))
+            : SizedBox(height: 100, child: ListView.builder(scrollDirection: Axis.horizontal, itemCount: _imagePaths.length + 1, itemBuilder: (context, index) {
+                if (index == _imagePaths.length) return InkWell(onTap: _pickImages, child: Container(width: 100, margin: const EdgeInsets.only(left: 8), decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(8)), child: const Icon(Icons.add_a_photo, color: Colors.grey)));
+                return Stack(children: [Container(width: 100, margin: const EdgeInsets.only(right: 8), decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), image: DecorationImage(image: FileImage(File(_imagePaths[index])), fit: BoxFit.cover))), Positioned(top: 4, right: 12, child: InkWell(onTap: () => _removeImage(index), child: Container(padding: const EdgeInsets.all(2), decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle), child: const Icon(Icons.close, size: 16, color: Colors.red))))]);
+              })),
+        const SizedBox(height: 16),
+        TextFormField(controller: _remarkController, maxLines: 3, decoration: const InputDecoration(labelText: 'မှတ်ချက်')), const SizedBox(height: 24),
+        SizedBox(width: double.infinity, height: 50, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))), onPressed: _saveProperty, child: Text(widget.editData == null ? 'သိမ်းမည်' : 'ပြင်ဆင်ချက် သိမ်းမည်', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)))),
+        const SizedBox(height: 40),
+      ])),
     );
+  }
+}
+
+class _OwnerSelectionSheet extends StatefulWidget {
+  final List<Map<String, dynamic>> initialOwners;
+  final Function(String id, String name) onOwnerSelected;
+  const _OwnerSelectionSheet({required this.initialOwners, required this.onOwnerSelected});
+  @override
+  State<_OwnerSelectionSheet> createState() => _OwnerSelectionSheetState();
+}
+class _OwnerSelectionSheetState extends State<_OwnerSelectionSheet> {
+  late List<Map<String, dynamic>> owners;
+  final TextEditingController _searchController = TextEditingController();
+  @override
+  void initState() { super.initState(); owners = widget.initialOwners; }
+  @override
+  Widget build(BuildContext context) {
+    final filtered = owners.where((o) => (o['name'] as String).toLowerCase().contains(_searchController.text.toLowerCase())).toList();
+    return Padding(padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, top: 24, left: 16, right: 16), child: Column(mainAxisSize: MainAxisSize.min, children: [
+      const Text('ပိုင်ရှင် ရွေးချယ်ရန်', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)), const SizedBox(height: 16),
+      TextField(controller: _searchController, decoration: const InputDecoration(labelText: 'ရှာဖွေရန်', prefixIcon: Icon(Icons.search)), onChanged: (_) => setState(() {})), const SizedBox(height: 16),
+      ConstrainedBox(constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.4), child: ListView.builder(shrinkWrap: true, itemCount: filtered.length, itemBuilder: (context, index) {
+        final o = filtered[index]; return ListTile(leading: const CircleAvatar(child: Icon(Icons.person)), title: Text(o['name']), onTap: () { widget.onOwnerSelected(o['id'], o['name']); Navigator.pop(context); });
+      })), const SizedBox(height: 16),
+    ]));
   }
 }
