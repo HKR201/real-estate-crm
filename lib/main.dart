@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'widgets/property_mini_card.dart';
-import 'screens/property_form_screen.dart'; // အခုလေးတင်ရေးခဲ့သော Form ဖိုင်ကို လှမ်းချိတ်ခြင်း
+import 'screens/property_form_screen.dart';
+import 'db/database_helper.dart'; // Database မှ ဒေတာများ ဆွဲထုတ်ရန်
 
 const String supabaseUrl = 'YOUR_SUPABASE_URL';
 const String supabaseAnonKey = 'YOUR_SUPABASE_ANON_KEY';
@@ -74,26 +75,40 @@ class _MainDashboardState extends State<MainDashboard> {
   int _currentIndex = 0;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>(); 
 
+  // Database မှ ရလာမည့် အိမ်ခြံမြေစာရင်းများကို သိမ်းထားရန် နေရာ
+  List<Map<String, dynamic>> _properties = [];
+  bool _isLoading = true; // ဒေတာ ဆွဲထုတ်နေစဉ် လည်နေမည့် သင်္ကေတ ပြရန်
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProperties(); // App စဖွင့်သည်နှင့် Database ထဲမှ ဒေတာများကို ဆွဲထုတ်မည်
+  }
+
+  // Database မှ ဒေတာ အစစ်များ ဆွဲထုတ်မည့် Function
+  Future<void> _loadProperties() async {
+    setState(() => _isLoading = true);
+    final data = await DatabaseHelper.instance.getAllProperties();
+    setState(() {
+      _properties = data;
+      _isLoading = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    // ဤနေရာတွင် သင်တောင်းဆိုထားသော Back ခလုတ် ထိန်းချုပ်သည့်စနစ် (PopScope) ကို ထည့်သွင်းထားပါသည်
     return PopScope(
-      canPop: false, // အလိုအလျောက် App ပြင်ပသို့ ထွက်သွားခြင်းကို ပိတ်ထားသည်
+      canPop: false, 
       onPopInvoked: (didPop) {
         if (didPop) return;
 
-        // ညာဘက် Option Drawer ပွင့်နေလျှင် Drawer ကိုသာ ပိတ်မည်
         if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) {
           Navigator.of(context).pop();
-        } 
-        // Home tab တွင် မဟုတ်ပါက Home သို့ ပြန်သွားမည်
-        else if (_currentIndex != 0) {
+        } else if (_currentIndex != 0) {
           setState(() {
             _currentIndex = 0;
           });
-        } 
-        // Home tab လည်းဖြစ် Drawer လည်း မပွင့်နေမှသာ App ထဲမှ ထွက်မည်
-        else {
+        } else {
           SystemNavigator.pop();
         }
       },
@@ -140,24 +155,36 @@ class _MainDashboardState extends State<MainDashboard> {
             ],
           ),
         ),
+        // Home Tab တွင် Database မှ ရလာသော အချက်အလက်များကို ပြသမည်
         body: _currentIndex == 0
-            ? ListView.builder(
-                padding: const EdgeInsets.only(top: 8, bottom: 80), 
-                itemCount: 5, 
-                itemBuilder: (context, index) {
-                  return PropertyMiniCard(
-                    title: 'လှိုင်မြို့နယ်ရှိ 2RC လုံးချင်းအိမ်သစ် ${index + 1}',
-                    askingPriceLakhs: 1500 + (index * 500), 
-                    location: 'လှိုင်မြို့နယ်',
-                    status: index % 2 == 0 ? 'Available' : 'Sold Out',
-                    east: 40,
-                    west: 40,
-                    south: 60,
-                    north: 60,
-                    isSynced: index != 2, 
-                  );
-                },
-              )
+            ? _isLoading
+                ? const Center(child: CircularProgressIndicator()) // ဆွဲထုတ်နေစဉ် လည်နေမည်
+                : _properties.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'အိမ်ခြံမြေစာရင်း မရှိသေးပါ။\nအပေါင်း (+) ခလုတ်ကို နှိပ်၍ အသစ်ထည့်ပါ။',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 16, color: Colors.grey),
+                        ),
+                      ) // စာရင်းမရှိသေးလျှင် ပြမည့်စာသား
+                    : ListView.builder(
+                        padding: const EdgeInsets.only(top: 8, bottom: 80), 
+                        itemCount: _properties.length, 
+                        itemBuilder: (context, index) {
+                          final prop = _properties[index];
+                          return PropertyMiniCard(
+                            title: prop['title'] ?? 'အမည်မသိ',
+                            askingPriceLakhs: prop['asking_price_lakhs'] ?? 0, 
+                            location: prop['location_id'] ?? 'မသိရ',
+                            status: prop['status'] ?? 'Available',
+                            east: prop['east_ft'] ?? 0,
+                            west: prop['west_ft'] ?? 0,
+                            south: prop['south_ft'] ?? 0,
+                            north: prop['north_ft'] ?? 0,
+                            isSynced: false, // Cloud ပေါ် မရောက်သေးကြောင်း တိမ်တိုက်အိုင်ကွန်ပြရန်
+                          );
+                        },
+                      )
             : const Center(
                 child: Text(
                   'Buyer (ဝယ်လက်) ဖော်ပြမည့်နေရာ',
@@ -167,12 +194,17 @@ class _MainDashboardState extends State<MainDashboard> {
         floatingActionButton: FloatingActionButton(
           backgroundColor: Theme.of(context).colorScheme.primary,
           foregroundColor: Theme.of(context).colorScheme.onPrimary,
-          onPressed: () {
-            // အပေါင်း (+) ခလုတ်နှိပ်ပါက Form စာမျက်နှာသို့ ကူးပြောင်းစေမည့် Code
-            Navigator.push(
+          onPressed: () async {
+            // Form မှ 'သိမ်းမည်' နှိပ်ပြီး ပြန်လာပါက result သည် true ဖြစ်မည်
+            final result = await Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const PropertyFormScreen()),
             );
+            
+            // အသစ်ထည့်ပြီး ပြန်လာပါက Database ကို Refresh အလိုလို လုပ်ပေးမည်
+            if (result == true) {
+              _loadProperties();
+            }
           },
           child: const Icon(Icons.add),
         ),
