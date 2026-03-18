@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:convert'; 
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart'; // <--- ဖုန်းခေါ်ရန်
+import 'package:url_launcher/url_launcher.dart'; 
 
 import 'widgets/property_mini_card.dart';
 import 'screens/property_form_screen.dart';
 import 'screens/owner_list_screen.dart';
 import 'screens/buyer_form_screen.dart'; 
+import 'screens/recycle_bin_screen.dart'; // <--- အမှိုက်ပုံး စာမျက်နှာကို လှမ်းချိတ်ထားသည်
 import 'db/database_helper.dart';
 
 const String supabaseUrl = 'YOUR_SUPABASE_URL';
@@ -23,13 +24,29 @@ void main() async {
 
 class RealEstateCrmApp extends StatelessWidget {
   const RealEstateCrmApp({super.key});
+  
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(title: 'Real Estate CRM', debugShowCheckedModeBanner: false, themeMode: ThemeMode.system, theme: _buildTheme(Brightness.light), darkTheme: _buildTheme(Brightness.dark), home: const MainDashboard());
+    return MaterialApp(
+      title: 'Real Estate CRM', 
+      debugShowCheckedModeBanner: false, 
+      themeMode: ThemeMode.system, 
+      theme: _buildTheme(Brightness.light), 
+      darkTheme: _buildTheme(Brightness.dark), 
+      home: const MainDashboard()
+    );
   }
+  
   ThemeData _buildTheme(Brightness brightness) {
     final isDark = brightness == Brightness.dark;
-    return ThemeData(useMaterial3: true, brightness: brightness, colorScheme: ColorScheme.fromSeed(seedColor: isDark ? const Color(0xFF4DB6AC) : const Color(0xFF008080), brightness: brightness, surface: isDark ? const Color(0xFF1E2626) : const Color(0xFFFFFFFF)), scaffoldBackgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F8F8), cardTheme: CardThemeData(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), elevation: 2), inputDecorationTheme: InputDecorationTheme(border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))));
+    return ThemeData(
+      useMaterial3: true, 
+      brightness: brightness, 
+      colorScheme: ColorScheme.fromSeed(seedColor: isDark ? const Color(0xFF4DB6AC) : const Color(0xFF008080), brightness: brightness, surface: isDark ? const Color(0xFF1E2626) : const Color(0xFFFFFFFF)), 
+      scaffoldBackgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F8F8), 
+      cardTheme: CardThemeData(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), elevation: 2), 
+      inputDecorationTheme: InputDecorationTheme(border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)))
+    );
   }
 }
 
@@ -48,7 +65,11 @@ class _MainDashboardState extends State<MainDashboard> {
   bool _isLoadingBuyers = true;
 
   @override
-  void initState() { super.initState(); _loadProperties(); _loadBuyers(); }
+  void initState() { 
+    super.initState(); 
+    _loadProperties(); 
+    _loadBuyers(); 
+  }
 
   Future<void> _loadProperties() async {
     setState(() => _isLoading = true);
@@ -79,7 +100,13 @@ class _MainDashboardState extends State<MainDashboard> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false, onPopInvoked: (didPop) { if (didPop) return; if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) { Navigator.of(context).pop(); } else if (_currentIndex != 0) { setState(() => _currentIndex = 0); } else { SystemNavigator.pop(); } },
+      canPop: false, 
+      onPopInvoked: (didPop) { 
+        if (didPop) return; 
+        if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) { Navigator.of(context).pop(); } 
+        else if (_currentIndex != 0) { setState(() => _currentIndex = 0); } 
+        else { SystemNavigator.pop(); } 
+      },
       child: Scaffold(
         key: _scaffoldKey,
         appBar: AppBar(automaticallyImplyLeading: false, title: const Text('CRM Dashboard', style: TextStyle(fontWeight: FontWeight.bold)), actions: [IconButton(icon: const Icon(Icons.search), onPressed: () {})]),
@@ -90,7 +117,23 @@ class _MainDashboardState extends State<MainDashboard> {
               const DrawerHeader(decoration: BoxDecoration(color: Color(0xFF008080)), child: Text('Options', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold))),
               ListTile(leading: const Icon(Icons.people), title: const Text('Owner List'), onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (context) => const OwnerListScreen())); }),
               ListTile(leading: const Icon(Icons.cloud_sync), title: const Text('Cloud Sync (Manual)'), onTap: () {}),
-              ListTile(leading: const Icon(Icons.delete_outline, color: Colors.red), title: const Text('Recycle Bin'), onTap: () {}),
+              
+              // --- အမှိုက်ပုံး (Recycle Bin) ခလုတ် ပြင်ဆင်ချက် ---
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red), 
+                title: const Text('Recycle Bin'), 
+                onTap: () async {
+                  Navigator.pop(context); // Drawer ကို အရင်ပိတ်မည်
+                  final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const RecycleBinScreen()));
+                  
+                  // Recycle Bin မှ Restore ပြန်လုပ်ခဲ့လျှင် Home စာမျက်နှာများကို Refresh လုပ်မည်
+                  if (result == true) {
+                    _loadProperties();
+                    _loadBuyers();
+                  }
+                }
+              ),
+              
               ListTile(leading: const Icon(Icons.settings), title: const Text('Settings'), onTap: () {}),
             ],
           ),
@@ -140,7 +183,7 @@ class _MainDashboardState extends State<MainDashboard> {
                 const SizedBox(height: 6),
                 if (phones.isNotEmpty) 
                   InkWell(
-                    onTap: () => launchUrl(Uri.parse('tel:${phones.first}')), // ဖုန်းခေါ်ရန် စနစ်ကို ချိတ်လိုက်ပါသည်
+                    onTap: () => launchUrl(Uri.parse('tel:${phones.first}')), 
                     child: Text(phones.join(', '), style: const TextStyle(color: Colors.blue, decoration: TextDecoration.underline)),
                   ),
                 const SizedBox(height: 8),
@@ -148,7 +191,6 @@ class _MainDashboardState extends State<MainDashboard> {
                   alignment: Alignment.centerRight,
                   child: OutlinedButton(
                     onPressed: () async {
-                      // Buyer Edit ဖောင်သို့ သွားရန်ချိတ်လိုက်ပါသည်
                       final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => BuyerFormScreen(editData: buyer)));
                       if (result == true) _loadBuyers();
                     },
