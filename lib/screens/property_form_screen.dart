@@ -6,7 +6,9 @@ import '../widgets/dynamic_dropdown.dart';
 import 'owner_form_screen.dart'; 
 
 class PropertyFormScreen extends StatefulWidget {
-  const PropertyFormScreen({super.key});
+  final Map<String, dynamic>? editData; // Edit လုပ်ရန် ဒေတာလက်ခံမည့်နေရာ
+
+  const PropertyFormScreen({super.key, this.editData});
 
   @override
   State<PropertyFormScreen> createState() => _PropertyFormScreenState();
@@ -24,18 +26,55 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
   final _southController = TextEditingController();
   final _northController = TextEditingController();
   final _remarkController = TextEditingController();
+  final _mapLinkController = TextEditingController(); // မြေပုံလင့်ခ်အတွက်
 
   String? _location;
   String? _roadType;
   String? _landType;
   String? _houseType; 
 
-  // အသစ်တိုးလာသော Fields များ
-  String _status = 'Available'; // ပုံမှန်အားဖြင့် Available
-  String? _propertyBaseType; // မြေကွက်သီးသန့် (သို့) အိမ်ပါသည်
+  String _status = 'Available'; 
+  String? _propertyBaseType; 
 
   String? _selectedOwnerId;
   String? _selectedOwnerName;
+
+  @override
+  void initState() {
+    super.initState();
+    // Edit Mode ဖြစ်ခဲ့လျှင် ယခင်ဒေတာများကို Form ထဲသို့ ထည့်သွင်းပေးမည်
+    if (widget.editData != null) {
+      final d = widget.editData!;
+      _titleController.text = d['title'] ?? '';
+      _askingPriceController.text = (d['asking_price_lakhs'] ?? '').toString();
+      _bottomPriceController.text = (d['bottom_price_lakhs'] ?? '').toString();
+      _eastController.text = (d['east_ft'] ?? '').toString();
+      _westController.text = (d['west_ft'] ?? '').toString();
+      _southController.text = (d['south_ft'] ?? '').toString();
+      _northController.text = (d['north_ft'] ?? '').toString();
+      _remarkController.text = d['remark'] ?? '';
+      _mapLinkController.text = d['map_link'] ?? '';
+      
+      _status = d['status'] ?? 'Available';
+      _location = d['location_id'];
+      _roadType = d['road_type'];
+      _landType = d['land_type'];
+      _houseType = d['house_type'];
+      
+      _propertyBaseType = (_houseType != null && _houseType!.isNotEmpty) ? 'အိမ်ပါသည်' : 'မြေကွက်သီးသန့်';
+      _selectedOwnerId = d['owner_id'];
+      
+      if (_selectedOwnerId != null) _loadOwnerName(_selectedOwnerId!);
+    }
+  }
+
+  Future<void> _loadOwnerName(String id) async {
+    final db = await DatabaseHelper.instance.database;
+    final result = await db.query('crm_owners', where: 'id = ?', whereArgs: [id]);
+    if (result.isNotEmpty && mounted) {
+      setState(() => _selectedOwnerName = result.first['name'] as String);
+    }
+  }
 
   @override
   void dispose() {
@@ -47,26 +86,19 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
     _southController.dispose();
     _northController.dispose();
     _remarkController.dispose();
+    _mapLinkController.dispose();
     super.dispose();
   }
 
   void _showOwnerSelectionSheet(BuildContext context) async {
     List<Map<String, dynamic>> owners = await DatabaseHelper.instance.getAllOwners();
     if (!context.mounted) return;
-
     showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      context: context, isScrollControlled: true, shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (context) {
         return _OwnerSelectionSheet(
           initialOwners: owners,
-          onOwnerSelected: (id, name) {
-            setState(() {
-              _selectedOwnerId = id;
-              _selectedOwnerName = name;
-            });
-          },
+          onOwnerSelected: (id, name) { setState(() { _selectedOwnerId = id; _selectedOwnerName = name; }); },
         );
       },
     );
@@ -74,33 +106,38 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
 
   Future<void> _saveProperty() async {
     if (_formKey.currentState!.validate()) {
-      final newProperty = {
-        'id': _uuid.v4(),
+      final propertyData = {
+        'id': widget.editData?['id'] ?? _uuid.v4(), // Edit ဆိုလျှင် ID အဟောင်းသုံးမည်
         'title': _titleController.text,
         'asking_price_lakhs': int.tryParse(_askingPriceController.text) ?? 0,
         'bottom_price_lakhs': int.tryParse(_bottomPriceController.text),
-        'status': _status, // ယခု ရွေးချယ်ထားသော Status ကို သိမ်းမည်
+        'status': _status, 
         'east_ft': int.tryParse(_eastController.text),
         'west_ft': int.tryParse(_westController.text),
         'south_ft': int.tryParse(_southController.text),
         'north_ft': int.tryParse(_northController.text),
-        'house_type': _propertyBaseType == 'အိမ်ပါသည်' ? _houseType : null, // အိမ်ပါမှသာ သိမ်းမည်
+        'house_type': _propertyBaseType == 'အိမ်ပါသည်' ? _houseType : null, 
         'road_type': _roadType,
         'land_type': _landType,
         'location_id': _location ?? 'မသိရ',
         'owner_id': _selectedOwnerId,
         'remark': _remarkController.text,
+        'map_link': _mapLinkController.text, // မြေပုံလင့်ခ် သိမ်းမည်
         'is_deleted': 0,
-        'created_at': DateTime.now().toIso8601String(),
         'updated_at': DateTime.now().toIso8601String(),
       };
 
-      await DatabaseHelper.instance.insertProperty(newProperty);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('အိမ်ခြံမြေစာရင်း အောင်မြင်စွာ သိမ်းဆည်းပြီးပါပြီ')));
-        Navigator.pop(context, true);
+      if (widget.editData == null) {
+        propertyData['created_at'] = DateTime.now().toIso8601String();
+        await DatabaseHelper.instance.insertProperty(propertyData);
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('အိမ်ခြံမြေစာရင်း အသစ် သိမ်းဆည်းပြီးပါပြီ')));
+      } else {
+        propertyData['created_at'] = widget.editData!['created_at']; // မူလအချိန်ကို ပြန်သုံးမည်
+        await DatabaseHelper.instance.updateProperty(propertyData);
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('အိမ်ခြံမြေစာရင်း ပြင်ဆင်ပြီးပါပြီ')));
       }
+
+      if (mounted) Navigator.pop(context, true);
     }
   }
 
@@ -108,7 +145,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('အိမ်ခြံမြေ အသစ်ထည့်ရန်', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(widget.editData == null ? 'အိမ်ခြံမြေ အသစ်ထည့်ရန်' : 'အိမ်ခြံမြေ ပြင်ဆင်ရန်', style: const TextStyle(fontWeight: FontWeight.bold)),
         leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.pop(context)),
       ),
       body: Form(
@@ -116,19 +153,25 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16.0),
           children: [
-            // Status ရွေးချယ်ရန် (အသစ်)
-            DropdownButtonFormField<String>(
-              value: _status,
-              decoration: const InputDecoration(labelText: 'Status (အခြေအနေ)', prefixIcon: Icon(Icons.info_outline)),
-              items: ['Available', 'Pending', 'Sold Out'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-              onChanged: (val) => setState(() => _status = val!),
+            // ၁။ Title ကို အပေါ်ဆုံးတင်လိုက်ပါသည်
+            TextFormField(
+              controller: _titleController,
+              decoration: const InputDecoration(labelText: 'ခေါင်းစဉ် (ဥပမာ - လှိုင် 2RC လုံးချင်းသစ်)', prefixIcon: Icon(Icons.title)),
+              validator: (value) => value!.isEmpty ? 'ခေါင်းစဉ် ထည့်ပေးပါ' : null,
             ),
             const SizedBox(height: 16),
 
-            TextFormField(
-              controller: _titleController,
-              decoration: const InputDecoration(labelText: 'ခေါင်းစဉ် (ဥပမာ - လှိုင် 2RC လုံးချင်းသစ်)'),
-              validator: (value) => value!.isEmpty ? 'ခေါင်းစဉ် ထည့်ပေးပါ' : null,
+            // ၂။ Status ကို Title အောက်တွင်ထားပြီး UI ကို သပ်ရပ်အောင် (OutlineInputBorder ဖြင့်) ပြင်ဆင်ထားပါသည်
+            DropdownButtonFormField<String>(
+              value: _status,
+              decoration: InputDecoration(
+                labelText: 'Status (အခြေအနေ)', 
+                prefixIcon: const Icon(Icons.info_outline),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              ),
+              items: ['Available', 'Pending', 'Sold Out'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+              onChanged: (val) => setState(() => _status = val!),
             ),
             const SizedBox(height: 16),
 
@@ -144,21 +187,25 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
             DynamicDropdown(label: 'မြို့နယ် / တည်နေရာ', category: 'location', selectedValue: _location, onChanged: (value) => setState(() => _location = value)),
             const SizedBox(height: 16),
             
-            // --- မြေကွက် သို့မဟုတ် အိမ်ပါသည် ရွေးချယ်ရန် ---
+            // ၃။ "ပစ္စည်းအမျိုးအစား" ကို "အမျိုးအစား" ဟု ပြောင်းပြီး UI လှအောင်ပြင်ထားပါသည်
             DropdownButtonFormField<String>(
               value: _propertyBaseType,
-              decoration: const InputDecoration(labelText: 'ပစ္စည်းအမျိုးအစား'),
+              decoration: InputDecoration(
+                labelText: 'အမျိုးအစား',
+                prefixIcon: const Icon(Icons.category),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              ),
               items: ['မြေကွက်သီးသန့်', 'အိမ်ပါသည်'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
               onChanged: (val) => setState(() {
                 _propertyBaseType = val;
-                if (val == 'မြေကွက်သီးသန့်') _houseType = null; // မြေကွက်ဆိုလျှင် အိမ်အမျိုးအစားကို ဖျက်မည်
+                if (val == 'မြေကွက်သီးသန့်') _houseType = null; 
               }),
             ),
             const SizedBox(height: 16),
 
-            // --- အိမ်ပါသည် ဖြစ်မှသာ အိမ်အမျိုးအစား Dynamic Dropdown ပေါ်လာမည် ---
             if (_propertyBaseType == 'အိမ်ပါသည်') ...[
-              DynamicDropdown(label: 'အိမ်အမျိုးအစား (ဥပမာ - 2RC, ပျဉ်ထောင်)', category: 'house_type', selectedValue: _houseType, onChanged: (value) => setState(() => _houseType = value)),
+              DynamicDropdown(label: 'အိမ်အမျိုးအစား (ဥပမာ - 2RC)', category: 'house_type', selectedValue: _houseType, onChanged: (value) => setState(() => _houseType = value)),
               const SizedBox(height: 16),
             ],
 
@@ -196,20 +243,20 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
               onTap: () => _showOwnerSelectionSheet(context),
               borderRadius: BorderRadius.circular(8),
               child: InputDecorator(
-                decoration: InputDecoration(
-                  labelText: 'ပိုင်ရှင်',
-                  prefixIcon: const Icon(Icons.person),
-                  suffixIcon: const Icon(Icons.arrow_drop_down),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                child: Text(
-                  _selectedOwnerName ?? 'ပိုင်ရှင် ရွေးချယ်ပါ (သို့) အသစ်ထည့်ပါ',
-                  style: TextStyle(color: _selectedOwnerName == null ? Colors.grey : Theme.of(context).colorScheme.onSurface, fontSize: 16),
-                ),
+                decoration: InputDecoration(labelText: 'ပိုင်ရှင်', prefixIcon: const Icon(Icons.person), suffixIcon: const Icon(Icons.arrow_drop_down), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
+                child: Text(_selectedOwnerName ?? 'ပိုင်ရှင် ရွေးချယ်ပါ (သို့) အသစ်ထည့်ပါ', style: TextStyle(color: _selectedOwnerName == null ? Colors.grey : Theme.of(context).colorScheme.onSurface, fontSize: 16)),
               ),
             ),
             const SizedBox(height: 16),
 
+            // ၄။ Map (မြေပုံ) အတွက် အကွက် (အသစ်)
+            TextFormField(
+              controller: _mapLinkController,
+              decoration: const InputDecoration(labelText: 'မြေပုံလင့်ခ် (Google Maps URL)', prefixIcon: Icon(Icons.map)),
+            ),
+            const SizedBox(height: 16),
+
+            // ၅။ ဓာတ်ပုံအတွက် Placeholder (နောင်တွင် View/Save ထည့်ရန် နေရာချန်ထားသည်)
             InkWell(
               onTap: () {},
               child: Container(
@@ -227,7 +274,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Theme.of(context).colorScheme.onPrimary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
                 onPressed: _saveProperty,
-                child: const Text('သိမ်းမည်', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                child: Text(widget.editData == null ? 'သိမ်းမည်' : 'ပြင်ဆင်ချက် သိမ်းမည်', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ),
             ),
             const SizedBox(height: 40),
@@ -242,45 +289,29 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
 class _OwnerSelectionSheet extends StatefulWidget {
   final List<Map<String, dynamic>> initialOwners;
   final Function(String id, String name) onOwnerSelected;
-
   const _OwnerSelectionSheet({required this.initialOwners, required this.onOwnerSelected});
-
   @override
   State<_OwnerSelectionSheet> createState() => _OwnerSelectionSheetState();
 }
-
 class _OwnerSelectionSheetState extends State<_OwnerSelectionSheet> {
   late List<Map<String, dynamic>> owners;
   final TextEditingController _searchController = TextEditingController();
-
   @override
-  void initState() {
-    super.initState();
-    owners = widget.initialOwners;
-  }
-
+  void initState() { super.initState(); owners = widget.initialOwners; }
   void _goToAddOwner() async {
     final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const OwnerFormScreen()));
     if (result == true) {
       final updatedOwners = await DatabaseHelper.instance.getAllOwners();
-      if (mounted) {
-        setState(() => owners = updatedOwners);
-        if (owners.isNotEmpty) {
-          widget.onOwnerSelected(owners.first['id'], owners.first['name']);
-          Navigator.pop(context); 
-        }
-      }
+      if (mounted) { setState(() => owners = updatedOwners); if (owners.isNotEmpty) { widget.onOwnerSelected(owners.first['id'], owners.first['name']); Navigator.pop(context); } }
     }
   }
-
   @override
   Widget build(BuildContext context) {
     final filteredOwners = owners.where((o) => (o['name'] as String).toLowerCase().contains(_searchController.text.toLowerCase())).toList();
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, top: 24, left: 16, right: 16),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('ပိုင်ရှင် ရွေးချယ်ရန်', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
@@ -290,22 +321,10 @@ class _OwnerSelectionSheetState extends State<_OwnerSelectionSheet> {
           const SizedBox(height: 8),
           ConstrainedBox(
             constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.4),
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: filteredOwners.length,
-              itemBuilder: (context, index) {
+            child: ListView.builder(shrinkWrap: true, itemCount: filteredOwners.length, itemBuilder: (context, index) {
                 final owner = filteredOwners[index];
-                List<dynamic> phones = [];
-                try { phones = jsonDecode(owner['phones'] ?? '[]'); } catch (_) {}
-                return ListTile(
-                  leading: const CircleAvatar(child: Icon(Icons.person)),
-                  title: Text(owner['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: phones.isNotEmpty ? Text(phones.first.toString()) : null,
-                  onTap: () {
-                    widget.onOwnerSelected(owner['id'], owner['name']);
-                    Navigator.pop(context);
-                  },
-                );
+                List<dynamic> phones = []; try { phones = jsonDecode(owner['phones'] ?? '[]'); } catch (_) {}
+                return ListTile(leading: const CircleAvatar(child: Icon(Icons.person)), title: Text(owner['name'], style: const TextStyle(fontWeight: FontWeight.bold)), subtitle: phones.isNotEmpty ? Text(phones.first.toString()) : null, onTap: () { widget.onOwnerSelected(owner['id'], owner['name']); Navigator.pop(context); });
               },
             ),
           ),
