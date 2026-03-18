@@ -9,11 +9,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  # ... အဟောင်းများ ...
-  share_plus: ^10.1.0    # ဖိုင်များကို Telegram/Viber သို့ ပို့ရန်
-  file_picker: ^8.1.2   # Backup ဖိုင် ပြန်ရွေးရန်
-  flutter:
-    sdk: flutter
   cupertino_icons: ^1.0.6
   supabase_flutter: ^2.5.4
   uuid: ^4.4.0
@@ -22,6 +17,8 @@ dependencies:
   url_launcher: ^6.3.0
   image_picker: ^1.1.2
   path_provider: ^2.1.2
+  share_plus: ^10.1.0
+  file_picker: ^8.1.2
 
 dev_dependencies:
   flutter_test:
