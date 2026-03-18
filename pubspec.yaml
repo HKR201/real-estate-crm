@@ -1,36 +1,26 @@
-ဓာတ်ပုံရပုံရွေးရန်: real_estate_crm
-description: A highly stable, offline-first Real Estate CRM.
+name: real_estate_crm
+description: "A new Flutter project for Real Estate CRM."
 publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.2.3 <4.0.0'
+  sdk: '>=3.0.0 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
-  
-  # --- CORE & BACKEND (နောက်ဆုံးပေါ် အငြိမ်ဆုံး Version များ) ---
-  supabase_flutter: ^2.4.1 # Cloud DB နှင့် ချိတ်ဆက်ရန်
-  sqflite: ^2.3.0 # Offline အသုံးပြုရန် (Local DB)
-  path_provider: ^2.1.2 # Database နှင့် ဓာတ်ပုံများ ဖုန်းထဲတွင် သိမ်းရန်
-  
-  # --- UTILITIES ---
-  uuid: ^4.3.3 # ID အသစ်များ ဖန်တီးရန်
-  connectivity_plus: ^5.0.2 # အင်တာနက် ရှိ/မရှိ စစ်ဆေးရန် (Offline Sync အတွက် အသက်သွေးကြော)
-  intl: ^0.19.0 # ငွေကြေး (သိန်းဂဏန်း) များကို ကော်မာ (,) ဖြင့် လှပစွာပြရန်
-  url_launcher: ^6.3.0 # ဖုန်းခေါ်ရန်နှင့် Google Maps ဖွင့်ရန်
+  cupertino_icons: ^1.0.6
+  supabase_flutter: ^2.5.4
+  uuid: ^4.4.0
+  sqflite: ^2.3.3
+  path: ^1.9.0
+  url_launcher: ^6.3.0
   image_picker: ^1.1.2
-  
-  # --- UI & MEDIA ---
-  google_fonts: ^6.1.0 # လှပသော စာလုံးဖောင့်များအတွက်
-  cached_network_image: ^3.3.1 # ဓာတ်ပုံများကို Offline ဖြင့် ကြည့်နိုင်ရန် ဖုန်းထဲမှတ်ထားပေးမည့်စနစ်
-  flutter_staggered_animations: ^1.1.1 # စာရင်းများ ပေါ်လာလျှင် ချောမွေ့စွာ အပေါ်တက်လာမည့် Animation
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.1
+  flutter_lints: ^3.0.0
 
 flutter:
   uses-material-design: true
