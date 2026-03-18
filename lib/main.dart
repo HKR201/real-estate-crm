@@ -9,6 +9,7 @@ import 'screens/property_form_screen.dart';
 import 'screens/owner_list_screen.dart';
 import 'screens/buyer_form_screen.dart'; 
 import 'screens/recycle_bin_screen.dart'; 
+import 'screens/settings_screen.dart'; // <--- Settings စာမျက်နှာကို ချိတ်ဆက်သည်
 import 'db/database_helper.dart';
 import 'utils/time_helper.dart'; 
 
@@ -59,7 +60,7 @@ class _MainDashboardState extends State<MainDashboard> {
     'asking_price_lakhs': 'ခေါ်ဈေးနှုန်း',
     'location_id': 'မြို့နယ်/တည်နေရာ',
     'road_type': 'လမ်းအမျိုးအစား',
-    'house_type': 'အိမ်အမျိုးအစား', // <--- ပြန်ထည့်ပေးထားပါသည်
+    'house_type': 'အိမ်အမျိုးအစား',
     'land_type': 'မြေအမျိုးအစား',
     'status': 'Status'
   };
@@ -87,16 +88,16 @@ class _MainDashboardState extends State<MainDashboard> {
   }
 
   void _showAutoCloseSnackBar(String message, VoidCallback? onUndo) {
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-    scaffoldMessenger.clearSnackBars();
-    scaffoldMessenger.showSnackBar(SnackBar(
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(SnackBar(
       behavior: SnackBarBehavior.floating,
       margin: const EdgeInsets.only(bottom: 80, left: 16, right: 16),
       content: Text(message),
       duration: const Duration(seconds: 3),
       action: onUndo != null ? SnackBarAction(label: 'Undo', textColor: Colors.yellow, onPressed: onUndo) : null,
     ));
-    Future.delayed(const Duration(seconds: 3), () => scaffoldMessenger.hideCurrentSnackBar());
+    Future.delayed(const Duration(seconds: 3), () => messenger.hideCurrentSnackBar());
   }
 
   void _deleteProperty(Map<String, dynamic> property) async {
@@ -151,7 +152,16 @@ class _MainDashboardState extends State<MainDashboard> {
               ListTile(leading: const Icon(Icons.people), title: const Text('Owner List'), onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (context) => const OwnerListScreen())); }),
               ListTile(leading: const Icon(Icons.cloud_sync), title: const Text('Cloud Sync (Manual)'), onTap: () {}),
               ListTile(leading: const Icon(Icons.delete_outline, color: Colors.red), title: const Text('Recycle Bin'), onTap: () async { Navigator.pop(context); final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const RecycleBinScreen())); if (result == true) { _loadProperties(); _loadBuyers(); } }),
-              ListTile(leading: const Icon(Icons.settings), title: const Text('Settings'), onTap: () {}),
+              
+              // --- Settings ခလုတ်ကို အသက်သွင်းလိုက်ပါသည် ---
+              ListTile(
+                leading: const Icon(Icons.settings), 
+                title: const Text('Settings'), 
+                onTap: () { 
+                  Navigator.pop(context); 
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())); 
+                }
+              ),
             ],
           ),
         ),
