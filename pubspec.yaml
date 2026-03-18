@@ -1,4 +1,4 @@
-name: real_estate_crm
+ဓာတ်ပုံရပုံရွေးရန်: real_estate_crm
 description: A highly stable, offline-first Real Estate CRM.
 publish_to: 'none'
 version: 1.0.0+1
@@ -24,7 +24,6 @@ dependencies:
   
   # --- UI & MEDIA ---
   google_fonts: ^6.1.0 # လှပသော စာလုံးဖောင့်များအတွက်
-  image_picker: ^1.0.7 # ကင်မရာနှင့် ဓာတ်ပုံရွေးရန်
   cached_network_image: ^3.3.1 # ဓာတ်ပုံများကို Offline ဖြင့် ကြည့်နိုင်ရန် ဖုန်းထဲမှတ်ထားပေးမည့်စနစ်
   flutter_staggered_animations: ^1.1.1 # စာရင်းများ ပေါ်လာလျှင် ချောမွေ့စွာ အပေါ်တက်လာမည့် Animation
 
