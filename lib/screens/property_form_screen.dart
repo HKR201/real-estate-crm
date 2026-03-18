@@ -181,10 +181,23 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
         
         // --- ပိုင်ရှင်ရွေးချယ်ရန် အကွက် (Restored) ---
         const Text('ပိုင်ရှင်အချက်အလက်', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)), const SizedBox(height: 8),
+        // (ရှေ့ပိုင်း Code များတူညီပါသည်...)
         InkWell(
           onTap: () => _showOwnerSelectionSheet(context), borderRadius: BorderRadius.circular(8),
-          child: InputDecorator(decoration: InputDecoration(labelText: 'ပိုင်ရှင်', prefixIcon: const Icon(Icons.person), suffixIcon: const Icon(Icons.arrow_drop_down), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))), child: Text(_selectedOwnerName ?? 'ပိုင်ရှင် ရွေးချယ်ပါ', style: TextStyle(color: _selectedOwnerName == null ? Colors.grey : Colors.black))),
+          child: InputDecorator(
+            decoration: InputDecoration(labelText: 'ပိုင်ရှင်', prefixIcon: const Icon(Icons.person), suffixIcon: const Icon(Icons.arrow_drop_down), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))), 
+            child: Text(
+              _selectedOwnerName ?? 'ပိုင်ရှင် ရွေးချယ်ပါ', 
+              style: TextStyle(
+                // Font အရောင်ကို ကျန်တဲ့ Input တွေနဲ့ တူအောင် Theme အတိုင်း ထားလိုက်ပါသည်
+                color: _selectedOwnerName == null ? Colors.grey : Theme.of(context).textTheme.bodyLarge?.color,
+                fontSize: 16
+              )
+            )
+          ),
         ),
+// (နောက်ပိုင်း Code များတူညီပါသည်...)
+
         const SizedBox(height: 16),
         
         TextFormField(controller: _mapLinkController, decoration: const InputDecoration(labelText: 'မြေပုံလင့်ခ် (Google Maps URL)', prefixIcon: Icon(Icons.map))),
