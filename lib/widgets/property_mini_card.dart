@@ -1,42 +1,26 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'package:url_launcher/url_launcher.dart'; // <--- မြေပုံဖွင့်ရန်
 import '../db/database_helper.dart';
-import '../screens/property_form_screen.dart'; // Property Edit ဖောင်
-import '../screens/owner_form_screen.dart'; // Owner Edit ဖောင်အတွက် ချိတ်ဆက်ထားသည်
+import '../screens/property_form_screen.dart'; 
+import '../screens/owner_form_screen.dart';
 
 class PropertyMiniCard extends StatelessWidget {
   final Map<String, dynamic> property; 
   final bool isSynced;
   final VoidCallback onDelete;
-  final VoidCallback onEditCompleted; // Edit ပြီးလျှင် Main Dashboard ကို Refresh လုပ်ရန်
+  final VoidCallback onEditCompleted;
 
-  const PropertyMiniCard({
-    super.key,
-    required this.property,
-    this.isSynced = false,
-    required this.onDelete,
-    required this.onEditCompleted,
-  });
+  const PropertyMiniCard({super.key, required this.property, this.isSynced = false, required this.onDelete, required this.onEditCompleted});
 
-  // ပိုင်ရှင် အချက်အလက် (Owner Card) ကို Edit ဖြင့်ပါ ဖွင့်ပေးရန်
   void _editOwnerDetails(BuildContext context) async {
     final ownerId = property['owner_id'];
-    
-    if (ownerId == null || ownerId.toString().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ဤအိမ်ခြံမြေအတွက် ပိုင်ရှင် ချိတ်ဆက်ထားခြင်း မရှိပါ')));
-      return;
-    }
-
+    if (ownerId == null || ownerId.toString().isEmpty) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ဤအိမ်ခြံမြေအတွက် ပိုင်ရှင် ချိတ်ဆက်ထားခြင်း မရှိပါ'))); return; }
     final db = await DatabaseHelper.instance.database;
     final result = await db.query('crm_owners', where: 'id = ?', whereArgs: [ownerId]);
-
     if (!context.mounted) return;
-
     if (result.isNotEmpty) {
-      final owner = result.first;
-      // ဤနေရာတွင် Alert Box အစား OwnerFormScreen (Edit Mode) သို့ တန်းသွားစေမည်
-      Navigator.push(context, MaterialPageRoute(builder: (_) => OwnerFormScreen(editData: owner)));
-      // Note: OwnerFormScreen တွင် editData လက်ခံမည့်အပိုင်းကို အပိုင်း (၂) တွင် ပြင်ဆင်ပေးပါမည်။ လောလောဆယ် ဖောင်ပွင့်သွားပါမည်။
+      Navigator.push(context, MaterialPageRoute(builder: (_) => OwnerFormScreen(editData: result.first)));
     } else {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ပိုင်ရှင် အချက်အလက် ရှာမတွေ့ပါ')));
     }
@@ -44,87 +28,48 @@ class PropertyMiniCard extends StatelessWidget {
 
   void _showExpandedCard(BuildContext context) {
     showModalBottomSheet(
-      context: context,
-      isScrollControlled: true, 
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (bottomSheetContext) { // Context နာမည်ပြောင်းထားသည်
-        final formattedPrice = (property['asking_price_lakhs'] ?? 0)
-            .toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
+      context: context, isScrollControlled: true, shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (bottomSheetContext) { 
+        final formattedPrice = (property['asking_price_lakhs'] ?? 0).toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
         final houseType = property['house_type'];
         final hasHouse = houseType != null && houseType.toString().isNotEmpty;
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 24, top: 12, left: 16, right: 16),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
-              const SizedBox(height: 16),
-              Container(
-                height: 180, width: double.infinity,
-                decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
-                child: const Center(child: Icon(Icons.photo_library, size: 40, color: Colors.grey)),
-              ),
-              const SizedBox(height: 16),
+              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))), const SizedBox(height: 16),
+              Container(height: 180, width: double.infinity, decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(8)), child: const Center(child: Icon(Icons.photo_library, size: 40, color: Colors.grey))), const SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Expanded(child: Text(property['title'] ?? 'အမည်မသိ', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold))),
                   IconButton(
                     icon: const Icon(Icons.map, color: Colors.blue), 
-                    onPressed: () {
-                      // Map Link နှိပ်လျှင် နောက်ပိုင်းတွင် url_launcher ဖြင့် ဖွင့်မည်
+                    onPressed: () async {
+                      // မြေပုံလင့်ခ်ကို url_launcher ဖြင့်ဖွင့်မည်
                       final mapLink = property['map_link'];
                       if (mapLink != null && mapLink.toString().isNotEmpty) {
-                        ScaffoldMessenger.of(bottomSheetContext).showSnackBar(SnackBar(content: Text('မြေပုံဖွင့်မည်: $mapLink')));
+                        final Uri url = Uri.parse(mapLink.toString());
+                        try { await launchUrl(url, mode: LaunchMode.externalApplication); } catch (e) {
+                          if (bottomSheetContext.mounted) ScaffoldMessenger.of(bottomSheetContext).showSnackBar(const SnackBar(content: Text('မြေပုံ ဖွင့်၍ မရပါ')));
+                        }
                       } else {
-                        ScaffoldMessenger.of(bottomSheetContext).showSnackBar(const SnackBar(content: Text('မြေပုံလင့်ခ် ထည့်သွင်းထားခြင်း မရှိပါ')));
+                        if (bottomSheetContext.mounted) ScaffoldMessenger.of(bottomSheetContext).showSnackBar(const SnackBar(content: Text('မြေပုံလင့်ခ် ထည့်သွင်းထားခြင်း မရှိပါ')));
                       }
                     }
                   )
                 ],
               ),
-              Text(hasHouse ? '${property['land_type'] ?? '-'} • ${property['road_type'] ?? '-'} • $houseType' : '${property['land_type'] ?? '-'} • ${property['road_type'] ?? '-'}', style: const TextStyle(fontSize: 14, color: Colors.grey)),
-              const SizedBox(height: 16),
-              Text('$formattedPrice သိန်း', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
-              const SizedBox(height: 8),
-              Text('${property['east_ft'] ?? 0} | ${property['west_ft'] ?? 0} | ${property['south_ft'] ?? 0} | ${property['north_ft'] ?? 0}', style: const TextStyle(fontSize: 16, letterSpacing: 2.0)),
-              const SizedBox(height: 24),
+              Text(hasHouse ? '${property['land_type'] ?? '-'} • ${property['road_type'] ?? '-'} • $houseType' : '${property['land_type'] ?? '-'} • ${property['road_type'] ?? '-'}', style: const TextStyle(fontSize: 14, color: Colors.grey)), const SizedBox(height: 16),
+              Text('$formattedPrice သိန်း', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)), const SizedBox(height: 8),
+              Text('${property['east_ft'] ?? 0} | ${property['west_ft'] ?? 0} | ${property['south_ft'] ?? 0} | ${property['north_ft'] ?? 0}', style: const TextStyle(fontSize: 16, letterSpacing: 2.0)), const SizedBox(height: 24),
               Row(
                 children: [
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Colors.white),
-                      onPressed: () {
-                        Navigator.pop(bottomSheetContext); // ကတ်ကို အရင်ပိတ်မည်
-                        _editOwnerDetails(context); // ပြီးမှ ပိုင်ရှင် Edit ကို သွားမည်
-                      }, 
-                      child: const Text('OWNER', style: TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(side: BorderSide(color: Theme.of(context).colorScheme.primary)),
-                      // Edit ခလုတ်ကို အသက်သွင်းလိုက်ပါပြီ
-                      onPressed: () async {
-                        Navigator.pop(bottomSheetContext); // ကတ်ကို အရင်ပိတ်မည်
-                        final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => PropertyFormScreen(editData: property)));
-                        if (result == true) onEditCompleted(); // ပြင်ပြီးပါက Main View ကို Refresh လုပ်မည်
-                      }, 
-                      child: Text('Edit', style: TextStyle(color: Theme.of(context).colorScheme.primary)),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  // အနီရောင် ✕ အစား အမှိုက်ပုံး Icon ဖြင့် ပြောင်းလိုက်ပါသည်
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, color: Colors.red),
-                    onPressed: () {
-                      Navigator.pop(bottomSheetContext); 
-                      onDelete(); 
-                    },
-                  )
+                  Expanded(child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Colors.white), onPressed: () { Navigator.pop(bottomSheetContext); _editOwnerDetails(context); }, child: const Text('OWNER', style: TextStyle(fontWeight: FontWeight.bold)))), const SizedBox(width: 12),
+                  Expanded(child: OutlinedButton(style: OutlinedButton.styleFrom(side: BorderSide(color: Theme.of(context).colorScheme.primary)), onPressed: () async { Navigator.pop(bottomSheetContext); final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => PropertyFormScreen(editData: property))); if (result == true) onEditCompleted(); }, child: Text('Edit', style: TextStyle(color: Theme.of(context).colorScheme.primary)))), const SizedBox(width: 12),
+                  IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red), onPressed: () { Navigator.pop(bottomSheetContext); onDelete(); })
                 ],
               )
             ],
@@ -136,55 +81,24 @@ class PropertyMiniCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final title = property['title'] ?? 'အမည်မသိ';
-    final askingPriceLakhs = property['asking_price_lakhs'] ?? 0;
-    final location = property['location_id'] ?? 'မသိရ';
-    final status = property['status'] ?? 'Available';
-    final east = property['east_ft'] ?? 0;
-    final west = property['west_ft'] ?? 0;
-    final south = property['south_ft'] ?? 0;
-    final north = property['north_ft'] ?? 0;
-
+    final title = property['title'] ?? 'အမည်မသိ'; final askingPriceLakhs = property['asking_price_lakhs'] ?? 0; final location = property['location_id'] ?? 'မသိရ'; final status = property['status'] ?? 'Available'; final east = property['east_ft'] ?? 0; final west = property['west_ft'] ?? 0; final south = property['south_ft'] ?? 0; final north = property['north_ft'] ?? 0;
     final bool isAvailable = status.toLowerCase() == 'available';
     final Color statusBgColor = status.toLowerCase() == 'sold out' ? Colors.red.shade50 : isAvailable ? const Color(0xFFE6F4EA) : Colors.orange.shade50;
     final Color statusTextColor = status.toLowerCase() == 'sold out' ? Colors.red : isAvailable ? const Color(0xFF137333) : Colors.orange.shade800;
     final String formattedPrice = askingPriceLakhs.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
 
     return InkWell(
-      onTap: () => _showExpandedCard(context),
-      borderRadius: BorderRadius.circular(8),
+      onTap: () => _showExpandedCard(context), borderRadius: BorderRadius.circular(8),
       child: Card(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        elevation: 1,
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), elevation: 1,
         child: Padding(
           padding: const EdgeInsets.all(12.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(color: statusBgColor, borderRadius: BorderRadius.circular(4)),
-                    child: Text(status, style: TextStyle(color: statusTextColor, fontSize: 10, fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text('$formattedPrice သိန်း • $location', style: TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('$east | $west | $south | $north', style: const TextStyle(fontSize: 13, color: Colors.grey, letterSpacing: 1.2)),
-                  Icon(isSynced ? Icons.cloud_done : Icons.cloud_upload, size: 16, color: isSynced ? Colors.grey.shade400 : Theme.of(context).colorScheme.primary),
-                ],
-              ),
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16), maxLines: 1, overflow: TextOverflow.ellipsis)), const SizedBox(width: 8), Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: statusBgColor, borderRadius: BorderRadius.circular(4)), child: Text(status, style: TextStyle(color: statusTextColor, fontSize: 10, fontWeight: FontWeight.bold)))]), const SizedBox(height: 8),
+              Text('$formattedPrice သိန်း • $location', style: TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600)), const SizedBox(height: 8),
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text('$east | $west | $south | $north', style: const TextStyle(fontSize: 13, color: Colors.grey, letterSpacing: 1.2)), Icon(isSynced ? Icons.cloud_done : Icons.cloud_upload, size: 16, color: isSynced ? Colors.grey.shade400 : Theme.of(context).colorScheme.primary)]),
             ],
           ),
         ),
