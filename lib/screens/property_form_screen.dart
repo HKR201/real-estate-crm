@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:uuid/uuid.dart'; // ID အသစ်များ ဖန်တီးရန်
-import '../db/database_helper.dart'; // Database နှင့် ချိတ်ဆက်ရန်
+import 'package:uuid/uuid.dart';
+import '../db/database_helper.dart';
+import '../widgets/dynamic_dropdown.dart'; // ခုနကရေးထားသော စမတ်ကျသည့် Dropdown ကို ခေါ်ယူခြင်း
 
 class PropertyFormScreen extends StatefulWidget {
   const PropertyFormScreen({super.key});
@@ -11,7 +12,7 @@ class PropertyFormScreen extends StatefulWidget {
 
 class _PropertyFormScreenState extends State<PropertyFormScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _uuid = const Uuid(); // ID ထုတ်ပေးမည့် စက်လေး
+  final _uuid = const Uuid();
 
   final _titleController = TextEditingController();
   final _askingPriceController = TextEditingController();
@@ -22,6 +23,8 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
   final _northController = TextEditingController();
   final _remarkController = TextEditingController();
 
+  // ရွေးချယ်စရာများအတွက် မှတ်သားမည့် နေရာများ
+  String? _location;
   String? _roadType;
   String? _landType;
 
@@ -38,38 +41,34 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
     super.dispose();
   }
 
-  // Database ထဲသို့ သိမ်းမည့် Function
   Future<void> _saveProperty() async {
     if (_formKey.currentState!.validate()) {
-      // ၁။ ယူရမည့် ဒေတာများကို Map (အုပ်စု) အနေဖြင့် စုစည်းခြင်း
       final newProperty = {
-        'id': _uuid.v4(), // မထပ်သော ID အသစ် ဖန်တီးခြင်း
+        'id': _uuid.v4(),
         'title': _titleController.text,
         'asking_price_lakhs': int.tryParse(_askingPriceController.text) ?? 0,
         'bottom_price_lakhs': int.tryParse(_bottomPriceController.text),
-        'status': 'Available', // ပုံမှန်အားဖြင့် ရောင်းရန်ရှိသည် ဟု သတ်မှတ်မည်
+        'status': 'Available',
         'east_ft': int.tryParse(_eastController.text),
         'west_ft': int.tryParse(_westController.text),
         'south_ft': int.tryParse(_southController.text),
         'north_ft': int.tryParse(_northController.text),
         'road_type': _roadType,
         'land_type': _landType,
-        'location_id': 'ရန်ကုန်', // လောလောဆယ် Default အနေဖြင့် ထားပါမည် (နောက်မှ Location ရွေးရန် ထည့်မည်)
+        'location_id': _location ?? 'မသိရ', // ယခု ရွေးချယ်ထားသော မြို့နယ်ကို သိမ်းမည်
         'remark': _remarkController.text,
-        'is_deleted': 0, // 0 = မဖျက်ရသေးပါ
+        'is_deleted': 0,
         'created_at': DateTime.now().toIso8601String(),
         'updated_at': DateTime.now().toIso8601String(),
       };
 
-      // ၂။ DatabaseHelper ကိုလှမ်းခေါ်ပြီး Save လုပ်ခိုင်းခြင်း
       await DatabaseHelper.instance.insertProperty(newProperty);
 
-      // ၃။ ပီးလျှင် အောင်မြင်ကြောင်း စာတန်းလေးပြပြီး Home သို့ ပြန်ထွက်ခြင်း
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('အိမ်ခြံမြေစာရင်း အောင်မြင်စွာ သိမ်းဆည်းပြီးပါပြီ')),
         );
-        Navigator.pop(context, true); // true ဟု ပြန်ပို့ခြင်းသည် Home စာမျက်နှာကို Refresh လုပ်ရန် အချက်ပြခြင်းဖြစ်သည်
+        Navigator.pop(context, true);
       }
     }
   }
@@ -89,6 +88,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16.0),
           children: [
+            // ၁။ ခေါင်းစဉ်
             TextFormField(
               controller: _titleController,
               decoration: const InputDecoration(labelText: 'ခေါင်းစဉ် (ဥပမာ - လှိုင် 2RC လုံးချင်းသစ်)'),
@@ -96,6 +96,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
             ),
             const SizedBox(height: 16),
 
+            // ၂။ ဈေးနှုန်း (Side-by-side)
             Row(
               children: [
                 Expanded(
@@ -118,6 +119,16 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
             ),
             const SizedBox(height: 16),
 
+            // ၃။ မြို့နယ် / တည်နေရာ (Dynamic Dropdown အသစ်)
+            DynamicDropdown(
+              label: 'မြို့နယ် / တည်နေရာ',
+              category: 'location',
+              selectedValue: _location,
+              onChanged: (value) => setState(() => _location = value),
+            ),
+            const SizedBox(height: 16),
+
+            // ၄။ အကျယ်အဝန်း
             const Text('အကျယ်အဝန်း (ပေ)', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
             const SizedBox(height: 8),
             Row(
@@ -137,31 +148,31 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
             ),
             const SizedBox(height: 16),
 
+            // ၅။ လမ်းအမျိုးအစား နှင့် မြေအမျိုးအစား (Dynamic Dropdowns)
             Row(
               children: [
                 Expanded(
-                  child: DropdownButtonFormField<String>(
-                    decoration: const InputDecoration(labelText: 'လမ်းအမျိုးအစား'),
-                    items: ['ကွန်ကရစ်လမ်း', 'ကတ္တရာလမ်း', 'မြေသားလမ်း'].map((String value) {
-                      return DropdownMenuItem<String>(value: value, child: Text(value, overflow: TextOverflow.ellipsis));
-                    }).toList(),
-                    onChanged: (newValue) => setState(() => _roadType = newValue),
+                  child: DynamicDropdown(
+                    label: 'လမ်းအမျိုးအစား',
+                    category: 'road_type',
+                    selectedValue: _roadType,
+                    onChanged: (value) => setState(() => _roadType = value),
                   ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
-                  child: DropdownButtonFormField<String>(
-                    decoration: const InputDecoration(labelText: 'မြေအမျိုးအစား'),
-                    items: ['ဂရန်မြေ', 'ရွာမြေ', 'ပါမစ်မြေ'].map((String value) {
-                      return DropdownMenuItem<String>(value: value, child: Text(value, overflow: TextOverflow.ellipsis));
-                    }).toList(),
-                    onChanged: (newValue) => setState(() => _landType = newValue),
+                  child: DynamicDropdown(
+                    label: 'မြေအမျိုးအစား',
+                    category: 'land_type',
+                    selectedValue: _landType,
+                    onChanged: (value) => setState(() => _landType = value),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
 
+            // ၆။ ဓာတ်ပုံရွေးရန်နေရာ
             InkWell(
               onTap: () {},
               child: Container(
@@ -183,6 +194,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
             ),
             const SizedBox(height: 16),
 
+            // ၇။ မှတ်ချက်
             TextFormField(
               controller: _remarkController,
               maxLines: 3,
@@ -190,6 +202,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
             ),
             const SizedBox(height: 24),
 
+            // ၈။ သိမ်းမည် ခလုတ်
             SizedBox(
               width: double.infinity,
               height: 50,
@@ -199,7 +212,6 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
                   foregroundColor: Theme.of(context).colorScheme.onPrimary,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
-                // ခလုတ်နှိပ်လျှင် အပေါ်တွင်ရေးထားသော Database သို့သိမ်းမည့် Function ကို ခေါ်မည်
                 onPressed: _saveProperty,
                 child: const Text('သိမ်းမည်', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ),
