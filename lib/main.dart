@@ -15,7 +15,6 @@ import 'utils/time_helper.dart';
 const String supabaseUrl = 'YOUR_SUPABASE_URL';
 const String supabaseAnonKey = 'YOUR_SUPABASE_ANON_KEY';
 
-// --- App စတင်မောင်းနှင်သည့် နေရာ (ဤအပိုင်း ပျောက်သွား၍ Error တက်ခြင်းဖြစ်သည်) ---
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
@@ -72,12 +71,7 @@ class _MainDashboardState extends State<MainDashboard> {
   void initState() { super.initState(); _loadProperties(); _loadBuyers(); }
 
   @override
-  void dispose() { 
-    _pageController.dispose(); 
-    _searchController.dispose(); 
-    _priceFilterController.dispose();
-    super.dispose(); 
-  }
+  void dispose() { _pageController.dispose(); _searchController.dispose(); _priceFilterController.dispose(); super.dispose(); }
 
   Future<void> _loadProperties() async {
     setState(() => _isLoading = true);
@@ -91,28 +85,35 @@ class _MainDashboardState extends State<MainDashboard> {
     setState(() { _buyers = List<Map<String, dynamic>>.from(data); _isLoadingBuyers = false; });
   }
 
+  // Snackbar 3s Force Fix
+  void _showAutoCloseSnackBar(String message, VoidCallback? onUndo) {
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      behavior: SnackBarBehavior.floating,
+      margin: const EdgeInsets.only(bottom: 80, left: 16, right: 16),
+      content: Text(message),
+      duration: const Duration(seconds: 3),
+      action: onUndo != null ? SnackBarAction(label: 'Undo', textColor: Colors.yellow, onPressed: onUndo) : null,
+    ));
+    Future.delayed(const Duration(seconds: 3), () { if (mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar(); });
+  }
+
   void _deleteProperty(Map<String, dynamic> property) async {
     setState(() => _properties.removeWhere((p) => p['id'] == property['id']));
     await DatabaseHelper.instance.moveToRecycleBin('crm_properties', property['id']);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).clearSnackBars(); 
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(behavior: SnackBarBehavior.floating, margin: const EdgeInsets.only(bottom: 80, left: 16, right: 16), content: const Text('အိမ်ခြံမြေစာရင်းကို ဖျက်လိုက်ပါပြီ'), duration: const Duration(seconds: 3), action: SnackBarAction(label: 'Undo (ပြန်ယူမည်)', textColor: Colors.yellow, onPressed: () async { await DatabaseHelper.instance.restoreFromRecycleBin('crm_properties', property['id']); _loadProperties(); })));
-    Future.delayed(const Duration(seconds: 3), () { if (mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar(); });
+    _showAutoCloseSnackBar('အိမ်ခြံမြေစာရင်းကို ဖျက်လိုက်ပါပြီ', () async { await DatabaseHelper.instance.restoreFromRecycleBin('crm_properties', property['id']); _loadProperties(); });
   }
 
   void _deleteBuyer(Map<String, dynamic> buyer) async {
     setState(() => _buyers.removeWhere((b) => b['id'] == buyer['id']));
     await DatabaseHelper.instance.moveToRecycleBin('crm_buyers', buyer['id']);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(behavior: SnackBarBehavior.floating, margin: const EdgeInsets.only(bottom: 80, left: 16, right: 16), content: const Text('ဝယ်လက်စာရင်းကို ဖျက်လိုက်ပါပြီ'), duration: const Duration(seconds: 3), action: SnackBarAction(label: 'Undo (ပြန်ယူမည်)', textColor: Colors.yellow, onPressed: () async { await DatabaseHelper.instance.restoreFromRecycleBin('crm_buyers', buyer['id']); _loadBuyers(); })));
-    Future.delayed(const Duration(seconds: 3), () { if (mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar(); });
+    _showAutoCloseSnackBar('ဝယ်လက်စာရင်းကို ဖျက်လိုက်ပါပြီ', () async { await DatabaseHelper.instance.restoreFromRecycleBin('crm_buyers', buyer['id']); _loadBuyers(); });
   }
 
   void _onFilterCategoryChanged(String? categoryKey) async {
-    setState(() { 
-      _selectedFilterCategory = categoryKey; _selectedFilterValue = null; _currentSubFilterValues = []; _priceFilterController.clear(); 
-    });
+    setState(() { _selectedFilterCategory = categoryKey; _selectedFilterValue = null; _currentSubFilterValues = []; _priceFilterController.clear(); });
     if (categoryKey == 'status') { _currentSubFilterValues = ['Available', 'Pending', 'Sold Out']; } 
     else if (categoryKey == 'location_id') { _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('location'); } 
     else if (categoryKey == 'road_type') { _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('road_type'); }
