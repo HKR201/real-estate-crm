@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
-import 'package:url_launcher/url_launcher.dart'; // <--- ဖုန်းခေါ်ရန်
+import 'package:url_launcher/url_launcher.dart'; 
 import '../db/database_helper.dart';
 import 'owner_form_screen.dart';
 
 class OwnerListScreen extends StatefulWidget {
-  const OwnerListScreen({super.key});
+  final String? highlightOwnerId; // <--- Redirect လုပ်လာပါက ပြသမည့် ပိုင်ရှင် ID
+  const OwnerListScreen({super.key, this.highlightOwnerId});
 
   @override
   State<OwnerListScreen> createState() => _OwnerListScreenState();
@@ -28,7 +29,12 @@ class _OwnerListScreenState extends State<OwnerListScreen> {
     setState(() => _owners.removeWhere((o) => o['id'] == owner['id']));
     await DatabaseHelper.instance.moveToRecycleBin('crm_owners', owner['id']);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('ပိုင်ရှင်စာရင်းကို ဖျက်လိုက်ပါပြီ'), duration: const Duration(seconds: 5), action: SnackBarAction(label: 'Undo (ပြန်ယူမည်)', textColor: Colors.yellow, onPressed: () async { await DatabaseHelper.instance.restoreFromRecycleBin('crm_owners', owner['id']); _loadOwners(); })));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      behavior: SnackBarBehavior.floating, // <--- Floating ဖြစ်အောင် ပြင်ထားသည်
+      content: const Text('ပိုင်ရှင်စာရင်းကို ဖျက်လိုက်ပါပြီ'), 
+      duration: const Duration(seconds: 4), 
+      action: SnackBarAction(label: 'Undo (ပြန်ယူမည်)', textColor: Colors.yellow, onPressed: () async { await DatabaseHelper.instance.restoreFromRecycleBin('crm_owners', owner['id']); _loadOwners(); })
+    ));
   }
 
   @override
@@ -44,9 +50,13 @@ class _OwnerListScreenState extends State<OwnerListScreen> {
                   itemBuilder: (context, index) {
                     final owner = _owners[index];
                     List<dynamic> phones = []; try { phones = jsonDecode(owner['phones'] ?? '[]'); } catch (_) {}
+                    
+                    // Highlight လုပ်ရမည့် ပိုင်ရှင်ဖြစ်မဖြစ် စစ်ဆေးခြင်း
+                    final isHighlighted = owner['id'] == widget.highlightOwnerId;
 
                     return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), elevation: 1,
+                      color: isHighlighted ? Theme.of(context).colorScheme.primaryContainer : null, // <--- Highlight အရောင်ပြောင်းမည်
+                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), elevation: isHighlighted ? 4 : 1,
                       child: ListTile(
                         leading: CircleAvatar(backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1), child: Icon(Icons.person, color: Theme.of(context).colorScheme.primary)),
                         title: Text(owner['name'] ?? 'အမည်မသိ', style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -56,13 +66,12 @@ class _OwnerListScreenState extends State<OwnerListScreen> {
                             const SizedBox(height: 4),
                             if (phones.isNotEmpty)
                               InkWell(
-                                onTap: () => launchUrl(Uri.parse('tel:${phones.first}')), // ဖုန်းခေါ်မည်
+                                onTap: () => launchUrl(Uri.parse('tel:${phones.first}')), 
                                 child: Text(phones.join(', '), style: const TextStyle(color: Colors.blue, decoration: TextDecoration.underline, fontWeight: FontWeight.w600)),
                               ),
                             if ((owner['remark'] ?? '').isNotEmpty) Text(owner['remark'], style: const TextStyle(color: Colors.grey, fontSize: 13)),
                           ],
                         ),
-                        // Edit နှင့် အမှိုက်ပုံး ခလုတ် ပူးတွဲ
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
