@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'package:uuid/uuid.dart'; // ID အသစ်ထုတ်ရန် ထည့်သွင်းထားသည်
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -25,7 +26,6 @@ class DatabaseHelper {
   }
 
   Future _createDB(Database db, int version) async {
-    // 1. Properties Table
     await db.execute('''
       CREATE TABLE crm_properties (
         id TEXT PRIMARY KEY,
@@ -50,7 +50,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // 2. Owners Table
     await db.execute('''
       CREATE TABLE crm_owners (
         id TEXT PRIMARY KEY,
@@ -64,7 +63,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // 3. Buyers Table
     await db.execute('''
       CREATE TABLE crm_buyers (
         id TEXT PRIMARY KEY,
@@ -79,7 +77,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // 4. Metadata Table
     await db.execute('''
       CREATE TABLE crm_metadata (
         id TEXT PRIMARY KEY,
@@ -89,7 +86,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // 5. Sync Logs Table
     await db.execute('''
       CREATE TABLE crm_sync_logs (
         id TEXT PRIMARY KEY,
@@ -100,29 +96,42 @@ class DatabaseHelper {
     ''');
   }
 
-  // ========================================================
-  // အသစ်ထည့်သွင်းလိုက်သော လုပ်ဆောင်ချက်များ (CRUD Operations)
-  // ========================================================
-
-  // ၁။ အိမ်ခြံမြေအသစ်ကို Database ထဲသို့ သိမ်းဆည်းရန် (Insert)
+  // အိမ်ခြံမြေစာရင်း သိမ်းရန်နှင့် ပြန်ထုတ်ရန်
   Future<int> insertProperty(Map<String, dynamic> row) async {
     Database db = await instance.database;
     return await db.insert('crm_properties', row);
   }
 
-  // ၂။ Database ထဲမှ အိမ်ခြံမြေစာရင်းများကို ပြန်လည်ဆွဲထုတ်ရန် (Read)
-  // (ဖျက်ထားသော is_deleted = 1 များကို မယူဘဲ၊ နောက်ဆုံးထည့်ထားသည့် အိမ်ကို အပေါ်ဆုံးတွင်ပြမည်)
   Future<List<Map<String, dynamic>>> getAllProperties() async {
     Database db = await instance.database;
-    return await db.query(
-      'crm_properties',
-      where: 'is_deleted = ?',
-      whereArgs: [0],
-      orderBy: 'created_at DESC', // အသစ်ဆုံးကို အပေါ်ဆုံးမှာ ပြရန်
-    );
+    return await db.query('crm_properties', where: 'is_deleted = ?', whereArgs: [0], orderBy: 'created_at DESC');
   }
 
-  // Database ကို ပိတ်ရန်
+  // ========================================================
+  // Metadata (လမ်း၊ မြေ၊ မြို့နယ်) များ ဆွဲထုတ်ရန်နှင့် အသစ်ထည့်ရန်
+  // ========================================================
+  
+  // ဆွဲထုတ်ခြင်း
+  Future<List<String>> getMetadata(String category) async {
+    Database db = await instance.database;
+    final result = await db.query('crm_metadata', where: 'category = ?', whereArgs: [category], orderBy: 'value ASC');
+    return result.map((e) => e['value'] as String).toList();
+  }
+
+  // အသစ်ထည့်ခြင်း (မရှိသေးမှသာ ထည့်မည်)
+  Future<void> insertMetadata(String category, String value) async {
+    Database db = await instance.database;
+    final existing = await db.query('crm_metadata', where: 'category = ? AND value = ?', whereArgs: [category, value]);
+    if (existing.isEmpty) {
+      await db.insert('crm_metadata', {
+        'id': const Uuid().v4(),
+        'category': category,
+        'value': value,
+        'created_at': DateTime.now().toIso8601String()
+      });
+    }
+  }
+
   Future close() async {
     final db = await instance.database;
     db.close();
