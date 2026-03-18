@@ -77,11 +77,12 @@ class _MainDashboardState extends State<MainDashboard> {
     _loadBuyers(); 
   }
 
+  // ဤနေရာတွင် Database မှ ရလာသော Read-only စာရင်းများကို List.from() သုံး၍ ပြင်ဆင်ဖျက်ဆီးနိုင်သော စာရင်းအဖြစ်သို့ ပြောင်းလဲထားပါသည် (Fix)
   Future<void> _loadProperties() async {
     setState(() => _isLoading = true);
     final data = await DatabaseHelper.instance.getAllProperties();
     setState(() {
-      _properties = data;
+      _properties = List<Map<String, dynamic>>.from(data); // Fix
       _isLoading = false;
     });
   }
@@ -90,34 +91,31 @@ class _MainDashboardState extends State<MainDashboard> {
     setState(() => _isLoadingBuyers = true);
     final data = await DatabaseHelper.instance.getAllBuyers();
     setState(() {
-      _buyers = data;
+      _buyers = List<Map<String, dynamic>>.from(data); // Fix
       _isLoadingBuyers = false;
     });
   }
 
   // --- ဝယ်လက်စာရင်းကို အမှိုက်ပုံးထဲပို့မည့် Function (Soft Delete) ---
   void _deleteBuyer(Map<String, dynamic> buyer) async {
-    // ၁။ မျက်စိရှေ့တွင် ချက်ချင်းပျောက်သွားစေရန် List ထဲမှ ဖယ်ထုတ်လိုက်သည် (UI Update)
+    // မျက်စိရှေ့မှ ချက်ချင်း ဖျောက်လိုက်မည် (ယခုအခါ အလုပ်လုပ်သွားပါပြီ)
     setState(() {
       _buyers.removeWhere((b) => b['id'] == buyer['id']);
     });
 
-    // ၂။ Database ထဲတွင် is_deleted = 1 ဟု ပြောင်းလိုက်သည်
     await DatabaseHelper.instance.moveToRecycleBin('crm_buyers', buyer['id']);
 
-    // ၃။ ၅ စက္ကန့်အတွင်း ပြန်ယူခွင့်ပေးမည့် (Undo) Snackbar ပြသခြင်း
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Text('ဝယ်လက်စာရင်းကို ဖျက်လိုက်ပါပြီ'),
-        duration: const Duration(seconds: 5), // ၅ စက္ကန့် ကြာမည်
+        duration: const Duration(seconds: 5), 
         action: SnackBarAction(
           label: 'Undo (ပြန်ယူမည်)',
           textColor: Colors.yellow,
           onPressed: () async {
-            // Undo နှိပ်ပါက Database တွင် is_deleted = 0 ဟု ပြန်ပြောင်းပေးမည်
             await DatabaseHelper.instance.restoreFromRecycleBin('crm_buyers', buyer['id']);
-            _loadBuyers(); // စာရင်းကို ပြန်လည် ဆွဲတင်မည်
+            _loadBuyers(); 
           },
         ),
       ),
@@ -246,7 +244,6 @@ class _MainDashboardState extends State<MainDashboard> {
                     Text(buyer['name'] ?? 'အမည်မသိ', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     IconButton(
                       icon: const Icon(Icons.close, color: Colors.red, size: 20),
-                      // ဤနေရာတွင် ခုနကရေးထားသော ဖျက်မည့် Function ကို ချိတ်ဆက်လိုက်ပါသည်
                       onPressed: () => _deleteBuyer(buyer),
                       constraints: const BoxConstraints(),
                       padding: EdgeInsets.zero,
