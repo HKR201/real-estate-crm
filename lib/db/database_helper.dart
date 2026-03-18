@@ -127,9 +127,7 @@ class DatabaseHelper {
     }
   }
 
-  // ========================================================
-  // --- Owners (ပိုင်ရှင်စာရင်း အသစ်ထည့်သည့်စနစ်) ---
-  // ========================================================
+  // --- Owners ---
   Future<int> insertOwner(Map<String, dynamic> row) async {
     Database db = await instance.database;
     return await db.insert('crm_owners', row);
@@ -138,6 +136,19 @@ class DatabaseHelper {
   Future<List<Map<String, dynamic>>> getAllOwners() async {
     Database db = await instance.database;
     return await db.query('crm_owners', where: 'is_deleted = ?', whereArgs: [0], orderBy: 'created_at DESC');
+  }
+
+  // ========================================================
+  // --- Buyers (ဝယ်လက်စာရင်း အသစ်ထည့်သည့်စနစ်) ---
+  // ========================================================
+  Future<int> insertBuyer(Map<String, dynamic> row) async {
+    Database db = await instance.database;
+    return await db.insert('crm_buyers', row);
+  }
+
+  Future<List<Map<String, dynamic>>> getAllBuyers() async {
+    Database db = await instance.database;
+    return await db.query('crm_buyers', where: 'is_deleted = ?', whereArgs: [0], orderBy: 'created_at DESC');
   }
 
   Future close() async {
