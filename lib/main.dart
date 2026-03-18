@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:convert'; // JSON ကို List အဖြစ်ပြန်ပြောင်းရန်
+import 'dart:convert'; 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'widgets/property_mini_card.dart';
 import 'screens/property_form_screen.dart';
 import 'screens/owner_list_screen.dart';
-import 'screens/buyer_form_screen.dart'; // ဝယ်လက်ဖောင်ကို လှမ်းချိတ်ခြင်း
+import 'screens/buyer_form_screen.dart'; 
 import 'db/database_helper.dart';
 
 const String supabaseUrl = 'YOUR_SUPABASE_URL';
@@ -64,7 +64,6 @@ class _MainDashboardState extends State<MainDashboard> {
   int _currentIndex = 0;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>(); 
   
-  // အိမ်ခြံမြေစာရင်းနှင့် ဝယ်လက်စာရင်းများ သိမ်းရန်
   List<Map<String, dynamic>> _properties = [];
   List<Map<String, dynamic>> _buyers = [];
   
@@ -75,7 +74,7 @@ class _MainDashboardState extends State<MainDashboard> {
   void initState() {
     super.initState();
     _loadProperties(); 
-    _loadBuyers(); // App အစတွင် ဝယ်လက်စာရင်းကိုပါ တစ်ခါတည်း ဆွဲထုတ်မည်
+    _loadBuyers(); 
   }
 
   Future<void> _loadProperties() async {
@@ -94,6 +93,35 @@ class _MainDashboardState extends State<MainDashboard> {
       _buyers = data;
       _isLoadingBuyers = false;
     });
+  }
+
+  // --- ဝယ်လက်စာရင်းကို အမှိုက်ပုံးထဲပို့မည့် Function (Soft Delete) ---
+  void _deleteBuyer(Map<String, dynamic> buyer) async {
+    // ၁။ မျက်စိရှေ့တွင် ချက်ချင်းပျောက်သွားစေရန် List ထဲမှ ဖယ်ထုတ်လိုက်သည် (UI Update)
+    setState(() {
+      _buyers.removeWhere((b) => b['id'] == buyer['id']);
+    });
+
+    // ၂။ Database ထဲတွင် is_deleted = 1 ဟု ပြောင်းလိုက်သည်
+    await DatabaseHelper.instance.moveToRecycleBin('crm_buyers', buyer['id']);
+
+    // ၃။ ၅ စက္ကန့်အတွင်း ပြန်ယူခွင့်ပေးမည့် (Undo) Snackbar ပြသခြင်း
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('ဝယ်လက်စာရင်းကို ဖျက်လိုက်ပါပြီ'),
+        duration: const Duration(seconds: 5), // ၅ စက္ကန့် ကြာမည်
+        action: SnackBarAction(
+          label: 'Undo (ပြန်ယူမည်)',
+          textColor: Colors.yellow,
+          onPressed: () async {
+            // Undo နှိပ်ပါက Database တွင် is_deleted = 0 ဟု ပြန်ပြောင်းပေးမည်
+            await DatabaseHelper.instance.restoreFromRecycleBin('crm_buyers', buyer['id']);
+            _loadBuyers(); // စာရင်းကို ပြန်လည် ဆွဲတင်မည်
+          },
+        ),
+      ),
+    );
   }
 
   @override
@@ -115,10 +143,7 @@ class _MainDashboardState extends State<MainDashboard> {
         appBar: AppBar(
           automaticallyImplyLeading: false, 
           title: const Text('CRM Dashboard', style: TextStyle(fontWeight: FontWeight.bold)),
-          actions: [
-            // ဝယ်လက်စာရင်းတွင် ရှိနေပါက Search icon က ဝယ်လက်အတွက် အလုပ်လုပ်ရန် ပြင်ဆင်မည်
-            IconButton(icon: const Icon(Icons.search), onPressed: () {})
-          ],
+          actions: [IconButton(icon: const Icon(Icons.search), onPressed: () {})],
         ),
         endDrawer: Drawer(
           child: ListView(
@@ -143,20 +168,16 @@ class _MainDashboardState extends State<MainDashboard> {
           ),
         ),
         
-        // Tab အလိုက် ပြသမည့် စာမျက်နှာ (Home သို့မဟုတ် Buyer)
         body: _currentIndex == 0 ? _buildHomeTab() : _buildBuyerTab(),
 
-        // အပေါင်း (+) ခလုတ်ကို Smart FAB အဖြစ် ပြောင်းလဲခြင်း
         floatingActionButton: FloatingActionButton(
           backgroundColor: Theme.of(context).colorScheme.primary,
           foregroundColor: Theme.of(context).colorScheme.onPrimary,
           onPressed: () async {
             if (_currentIndex == 0) {
-              // Home တွင် နှိပ်ပါက Property Form သို့သွားမည်
               final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const PropertyFormScreen()));
               if (result == true) _loadProperties();
             } else if (_currentIndex == 1) {
-              // Buyer တွင် နှိပ်ပါက Buyer Form သို့သွားမည်
               final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const BuyerFormScreen()));
               if (result == true) _loadBuyers();
             }
@@ -182,7 +203,6 @@ class _MainDashboardState extends State<MainDashboard> {
     );
   }
 
-  // အိမ်ခြံမြေစာရင်း ပြသမည့် Tab (Home)
   Widget _buildHomeTab() {
     if (_isLoading) return const Center(child: CircularProgressIndicator());
     if (_properties.isEmpty) {
@@ -197,7 +217,6 @@ class _MainDashboardState extends State<MainDashboard> {
     );
   }
 
-  // ဝယ်လက်စာရင်း ပြသမည့် Tab (Buyer) - Blueprint အတိုင်း တည်ဆောက်ထားသည်
   Widget _buildBuyerTab() {
     if (_isLoadingBuyers) return const Center(child: CircularProgressIndicator());
     if (_buyers.isEmpty) {
@@ -221,41 +240,32 @@ class _MainDashboardState extends State<MainDashboard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Top Row: Name & Red Cross
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(buyer['name'] ?? 'အမည်မသိ', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     IconButton(
                       icon: const Icon(Icons.close, color: Colors.red, size: 20),
-                      onPressed: () {}, // နောက်မှ Soft Delete ထည့်မည်
+                      // ဤနေရာတွင် ခုနကရေးထားသော ဖျက်မည့် Function ကို ချိတ်ဆက်လိုက်ပါသည်
+                      onPressed: () => _deleteBuyer(buyer),
                       constraints: const BoxConstraints(),
                       padding: EdgeInsets.zero,
                     )
                   ],
                 ),
                 const SizedBox(height: 8),
-                
-                // Values Only: Budget & Location
-                Text('$budget သိန်း • ${buyer['preferred_location']}', 
-                  style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 15)),
+                Text('$budget သိန်း • ${buyer['preferred_location']}', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 15)),
                 const SizedBox(height: 6),
-                
-                // Phones List
                 if (phones.isNotEmpty) 
                   InkWell(
-                    onTap: () {
-                      // နောက်ပိုင်းတွင် ဖုန်းခေါ်မည့်စနစ် (Dialer) ချိတ်ဆက်မည်
-                    },
+                    onTap: () {},
                     child: Text(phones.join(', '), style: const TextStyle(color: Colors.blue, decoration: TextDecoration.underline)),
                   ),
                 const SizedBox(height: 8),
-
-                // Bottom Compact Edit Button
                 Align(
                   alignment: Alignment.centerRight,
                   child: OutlinedButton(
-                    onPressed: () {}, // နောက်မှ Edit Form သို့ချိတ်မည်
+                    onPressed: () {},
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
                       minimumSize: const Size(60, 30),
