@@ -2,7 +2,6 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
 class DatabaseHelper {
-  // Singleton pattern - Database ကို တစ်နေရာတည်းကနေပဲ ခေါ်သုံးနိုင်ရန်
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
 
@@ -14,7 +13,6 @@ class DatabaseHelper {
     return _database!;
   }
 
-  // Database ဖိုင်ကို ဖုန်းထဲတွင် ဖန်တီးခြင်း
   Future<Database> _initDB(String filePath) async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
@@ -26,12 +24,8 @@ class DatabaseHelper {
     );
   }
 
-  // Table (ဇယား) များ တည်ဆောက်ခြင်း
   Future _createDB(Database db, int version) async {
-    // မှတ်ချက် - SQLite တွင် Boolean မရှိပါသဖြင့် is_deleted အား INTEGER (0 သို့မဟုတ် 1) ဖြင့် သိမ်းပါမည်။
-    // JSONB မရှိပါသဖြင့် extra_data အား TEXT ဖြင့် သိမ်းပါမည်။
-
-    // 1. Properties (အိမ်ခြံမြေစာရင်း)
+    // 1. Properties Table
     await db.execute('''
       CREATE TABLE crm_properties (
         id TEXT PRIMARY KEY,
@@ -56,7 +50,7 @@ class DatabaseHelper {
       )
     ''');
 
-    // 2. Owners (ပိုင်ရှင်စာရင်း)
+    // 2. Owners Table
     await db.execute('''
       CREATE TABLE crm_owners (
         id TEXT PRIMARY KEY,
@@ -70,7 +64,7 @@ class DatabaseHelper {
       )
     ''');
 
-    // 3. Buyers (ဝယ်လက်စာရင်း)
+    // 3. Buyers Table
     await db.execute('''
       CREATE TABLE crm_buyers (
         id TEXT PRIMARY KEY,
@@ -85,7 +79,7 @@ class DatabaseHelper {
       )
     ''');
 
-    // 4. Metadata (ရွေးချယ်စရာ အမျိုးအစားများ)
+    // 4. Metadata Table
     await db.execute('''
       CREATE TABLE crm_metadata (
         id TEXT PRIMARY KEY,
@@ -95,7 +89,7 @@ class DatabaseHelper {
       )
     ''');
 
-    // 5. Sync Logs (အင်တာနက်နှင့် ချိတ်ဆက်မှု မှတ်တမ်း)
+    // 5. Sync Logs Table
     await db.execute('''
       CREATE TABLE crm_sync_logs (
         id TEXT PRIMARY KEY,
@@ -106,7 +100,29 @@ class DatabaseHelper {
     ''');
   }
 
-  // Database ကို ပိတ်ရန် (Memory မစားစေရန်)
+  // ========================================================
+  // အသစ်ထည့်သွင်းလိုက်သော လုပ်ဆောင်ချက်များ (CRUD Operations)
+  // ========================================================
+
+  // ၁။ အိမ်ခြံမြေအသစ်ကို Database ထဲသို့ သိမ်းဆည်းရန် (Insert)
+  Future<int> insertProperty(Map<String, dynamic> row) async {
+    Database db = await instance.database;
+    return await db.insert('crm_properties', row);
+  }
+
+  // ၂။ Database ထဲမှ အိမ်ခြံမြေစာရင်းများကို ပြန်လည်ဆွဲထုတ်ရန် (Read)
+  // (ဖျက်ထားသော is_deleted = 1 များကို မယူဘဲ၊ နောက်ဆုံးထည့်ထားသည့် အိမ်ကို အပေါ်ဆုံးတွင်ပြမည်)
+  Future<List<Map<String, dynamic>>> getAllProperties() async {
+    Database db = await instance.database;
+    return await db.query(
+      'crm_properties',
+      where: 'is_deleted = ?',
+      whereArgs: [0],
+      orderBy: 'created_at DESC', // အသစ်ဆုံးကို အပေါ်ဆုံးမှာ ပြရန်
+    );
+  }
+
+  // Database ကို ပိတ်ရန်
   Future close() async {
     final db = await instance.database;
     db.close();
