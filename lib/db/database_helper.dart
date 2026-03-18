@@ -1,6 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
-import 'package:uuid/uuid.dart'; // ID အသစ်ထုတ်ရန် ထည့်သွင်းထားသည်
+import 'package:uuid/uuid.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -96,7 +96,7 @@ class DatabaseHelper {
     ''');
   }
 
-  // အိမ်ခြံမြေစာရင်း သိမ်းရန်နှင့် ပြန်ထုတ်ရန်
+  // --- Properties ---
   Future<int> insertProperty(Map<String, dynamic> row) async {
     Database db = await instance.database;
     return await db.insert('crm_properties', row);
@@ -107,18 +107,13 @@ class DatabaseHelper {
     return await db.query('crm_properties', where: 'is_deleted = ?', whereArgs: [0], orderBy: 'created_at DESC');
   }
 
-  // ========================================================
-  // Metadata (လမ်း၊ မြေ၊ မြို့နယ်) များ ဆွဲထုတ်ရန်နှင့် အသစ်ထည့်ရန်
-  // ========================================================
-  
-  // ဆွဲထုတ်ခြင်း
+  // --- Metadata ---
   Future<List<String>> getMetadata(String category) async {
     Database db = await instance.database;
     final result = await db.query('crm_metadata', where: 'category = ?', whereArgs: [category], orderBy: 'value ASC');
     return result.map((e) => e['value'] as String).toList();
   }
 
-  // အသစ်ထည့်ခြင်း (မရှိသေးမှသာ ထည့်မည်)
   Future<void> insertMetadata(String category, String value) async {
     Database db = await instance.database;
     final existing = await db.query('crm_metadata', where: 'category = ? AND value = ?', whereArgs: [category, value]);
@@ -130,6 +125,19 @@ class DatabaseHelper {
         'created_at': DateTime.now().toIso8601String()
       });
     }
+  }
+
+  // ========================================================
+  // --- Owners (ပိုင်ရှင်စာရင်း အသစ်ထည့်သည့်စနစ်) ---
+  // ========================================================
+  Future<int> insertOwner(Map<String, dynamic> row) async {
+    Database db = await instance.database;
+    return await db.insert('crm_owners', row);
+  }
+
+  Future<List<Map<String, dynamic>>> getAllOwners() async {
+    Database db = await instance.database;
+    return await db.query('crm_owners', where: 'is_deleted = ?', whereArgs: [0], orderBy: 'created_at DESC');
   }
 
   Future close() async {
