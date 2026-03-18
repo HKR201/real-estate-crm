@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:sqflite/sqflite.dart';
 import '../db/database_helper.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -13,58 +14,69 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool _isExporting = false;
+  bool _isProcessing = false;
 
-  // --- ဒေတာအားလုံးကို JSON ဖိုင်အဖြစ် ထုတ်ယူခြင်း (Export) ---
   Future<void> _exportBackup() async {
-    setState(() => _isExporting = true);
+    setState(() => _isProcessing = true);
     try {
-      final properties = await DatabaseHelper.instance.getAllProperties();
-      final owners = await DatabaseHelper.instance.getAllOwners();
-      final buyers = await DatabaseHelper.instance.getAllBuyers();
+      final db = await DatabaseHelper.instance.database;
+      final properties = await db.query('crm_properties');
+      final owners = await db.query('crm_owners');
+      final buyers = await db.query('crm_buyers');
+      final metadata = await db.query('crm_metadata');
 
       Map<String, dynamic> backupData = {
-        'version': '1.0',
         'export_date': DateTime.now().toIso8601String(),
         'properties': properties,
         'owners': owners,
         'buyers': buyers,
+        'metadata': metadata,
       };
 
       final String jsonString = jsonEncode(backupData);
       final directory = await getTemporaryDirectory();
-      final File backupFile = File('${directory.path}/CRM_Backup_${DateTime.now().millisecondsSinceEpoch}.json');
-      await backupFile.writeAsString(jsonString);
+      final File file = File('${directory.path}/CRM_Backup_${DateTime.now().millisecondsSinceEpoch}.json');
+      await file.writeAsString(jsonString);
 
-      await Share.shareXFiles([XFile(backupFile.path)], text: 'CRM App Offline Backup');
+      await Share.shareXFiles([XFile(file.path)], text: 'Real Estate CRM Backup File');
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Backup လုပ်၍မရပါ - $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
-      setState(() => _isExporting = false);
+      setState(() => _isProcessing = false);
     }
   }
 
-  // --- Backup ဖိုင်ကို ပြန်သွင်းခြင်း (Restore) ---
   Future<void> _importBackup() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['json']);
     if (result == null) return;
 
+    setState(() => _isProcessing = true);
     try {
       final file = File(result.files.single.path!);
       final content = await file.readAsString();
       final Map<String, dynamic> data = jsonDecode(content);
 
-      // Database ထဲသို့ တစ်ခုချင်း ပြန်သွင်းခြင်း
       final db = await DatabaseHelper.instance.database;
-      
-      // ဤနေရာတွင် ရိုးရှင်းစေရန် ID တူလျှင် အဟောင်းကို ဖျက်ပြီး အသစ်သွင်းသည့်ပုံစံ သုံးမည်
-      for (var p in data['properties']) await db.insert('crm_properties', p, conflictAlgorithm: ConflictAlgorithm.replace);
-      for (var o in data['owners']) await db.insert('crm_owners', o, conflictAlgorithm: ConflictAlgorithm.replace);
-      for (var b in data['buyers']) await db.insert('crm_buyers', b, conflictAlgorithm: ConflictAlgorithm.replace);
+      await db.transaction((txn) async {
+        if (data['properties'] != null) {
+          for (var item in data['properties']) await txn.insert('crm_properties', item, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+        if (data['owners'] != null) {
+          for (var item in data['owners']) await txn.insert('crm_owners', item, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+        if (data['buyers'] != null) {
+          for (var item in data['buyers']) await txn.insert('crm_buyers', item, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+        if (data['metadata'] != null) {
+          for (var item in data['metadata']) await txn.insert('crm_metadata', item, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+      });
 
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ဒေတာများ ပြန်သွင်းပြီးပါပြီ'), backgroundColor: Colors.green));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ဒေတာများ အောင်မြင်စွာ ပြန်သွင်းပြီးပါပြီ'), backgroundColor: Colors.green));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Restore လုပ်၍မရပါ - $e'), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Restore Error: $e'), backgroundColor: Colors.red));
+    } finally {
+      setState(() => _isProcessing = false);
     }
   }
 
@@ -72,32 +84,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings & Sync')),
-      body: ListView(
+      body: Stack(
         children: [
-          const ListTile(title: Text('Cloud Synchronization', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal))),
-          ListTile(
-            leading: const Icon(Icons.cloud_upload),
-            title: const Text('Manual Cloud Sync'),
-            subtitle: const Text('အခုချက်ချင်း Cloud ပေါ်သို့ ဒေတာတင်မည်'),
-            onTap: () {
-               // Supabase Sync Logic ကို နောက်တဆင့်တွင် ထည့်ပါမည်
-               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cloud Sync လုပ်ဆောင်နေပါသည်...')));
-            },
+          ListView(
+            children: [
+              const ListTile(title: Text('Cloud Services', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal))),
+              ListTile(
+                leading: const Icon(Icons.cloud_sync),
+                title: const Text('Manual Cloud Sync'),
+                subtitle: const Text('Supabase Cloud ပေါ်သို့ အခုချက်ချင်း ဒေတာတင်မည်'),
+                onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cloud Sync လုပ်ဆောင်ချက်ကို နောက်တစ်ဆင့်တွင် ထည့်သွင်းပေးပါမည်'))),
+              ),
+              const Divider(),
+              const ListTile(title: Text('Offline Backup & Restore', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal))),
+              ListTile(
+                leading: const Icon(Icons.download_for_offline, color: Colors.blue),
+                title: const Text('Export Data (Backup)'),
+                subtitle: const Text('ဒေတာအားလုံးကို JSON ဖိုင်အဖြစ် ထုတ်ယူမည်'),
+                onTap: _isProcessing ? null : _exportBackup,
+              ),
+              ListTile(
+                leading: const Icon(Icons.upload_file, color: Colors.orange),
+                title: const Text('Import Data (Restore)'),
+                subtitle: const Text('သိမ်းထားသော ဖိုင်မှ ဒေတာများ ပြန်သွင်းမည်'),
+                onTap: _isProcessing ? null : _importBackup,
+              ),
+            ],
           ),
-          const Divider(),
-          const ListTile(title: Text('Offline Backup (အင်တာနက်မလိုပါ)', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal))),
-          ListTile(
-            leading: const Icon(Icons.sd_storage),
-            title: const Text('Export Data (Backup)'),
-            subtitle: const Text('ဒေတာများကို ဖိုင်အဖြစ် ထုတ်ယူသိမ်းဆည်းမည်'),
-            onTap: _isExporting ? null : _exportBackup,
-          ),
-          ListTile(
-            leading: const Icon(Icons.settings_backup_restore),
-            title: const Text('Import Data (Restore)'),
-            subtitle: const Text('သိမ်းထားသော Backup ဖိုင်မှ ဒေတာများ ပြန်သွင်းမည်'),
-            onTap: _importBackup,
-          ),
+          if (_isProcessing) const Center(child: CircularProgressIndicator()),
         ],
       ),
     );
