@@ -1,224 +1,101 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'dart:convert'; 
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:convert';
+import 'dart:io';
 import 'package:url_launcher/url_launcher.dart'; 
+import '../screens/property_form_screen.dart'; 
+import '../screens/owner_list_screen.dart'; 
+import '../utils/time_helper.dart'; 
 
-import 'widgets/property_mini_card.dart';
-import 'screens/property_form_screen.dart';
-import 'screens/owner_list_screen.dart';
-import 'screens/buyer_form_screen.dart'; 
-import 'screens/recycle_bin_screen.dart'; 
-import 'db/database_helper.dart';
-import 'utils/time_helper.dart'; 
+class PropertyMiniCard extends StatelessWidget {
+  final Map<String, dynamic> property; 
+  final bool isSynced;
+  final VoidCallback onDelete;
+  final VoidCallback onEditCompleted;
 
-const String supabaseUrl = 'YOUR_SUPABASE_URL';
-const String supabaseAnonKey = 'YOUR_SUPABASE_ANON_KEY';
+  const PropertyMiniCard({super.key, required this.property, this.isSynced = false, required this.onDelete, required this.onEditCompleted});
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
-  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(systemNavigationBarColor: Colors.transparent, statusBarColor: Colors.transparent));
-  runApp(const RealEstateCrmApp());
-}
-
-class RealEstateCrmApp extends StatelessWidget {
-  const RealEstateCrmApp({super.key});
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(title: 'Real Estate CRM', debugShowCheckedModeBanner: false, themeMode: ThemeMode.system, theme: _buildTheme(Brightness.light), darkTheme: _buildTheme(Brightness.dark), home: const MainDashboard());
-  }
-  ThemeData _buildTheme(Brightness brightness) {
-    final isDark = brightness == Brightness.dark;
-    return ThemeData(useMaterial3: true, brightness: brightness, colorScheme: ColorScheme.fromSeed(seedColor: isDark ? const Color(0xFF4DB6AC) : const Color(0xFF008080), brightness: brightness, surface: isDark ? const Color(0xFF1E2626) : const Color(0xFFFFFFFF)), scaffoldBackgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F8F8), cardTheme: CardThemeData(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), elevation: 2), inputDecorationTheme: InputDecorationTheme(border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))));
-  }
-}
-
-class MainDashboard extends StatefulWidget {
-  const MainDashboard({super.key});
-  @override
-  State<MainDashboard> createState() => _MainDashboardState();
-}
-
-class _MainDashboardState extends State<MainDashboard> {
-  int _currentIndex = 0;
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>(); 
-  final PageController _pageController = PageController(); 
-
-  List<Map<String, dynamic>> _properties = [];
-  List<Map<String, dynamic>> _buyers = [];
-  bool _isLoading = true; 
-  bool _isLoadingBuyers = true;
-
-  bool _isSearching = false;
-  final TextEditingController _searchController = TextEditingController();
-  String _searchQuery = '';
-
-  final Map<String, String> _filterCategories = {
-    'asking_price_lakhs': 'ခေါ်ဈေးနှုန်း',
-    'location_id': 'မြို့နယ်/တည်နေရာ',
-    'road_type': 'လမ်းအမျိုးအစား',
-    'land_type': 'မြေအမျိုးအစား',
-    'status': 'Status'
-  };
-  String? _selectedFilterCategory;
-  String? _selectedFilterValue;
-  List<String> _currentSubFilterValues = [];
-  final TextEditingController _priceFilterController = TextEditingController();
-
-  @override
-  void initState() { super.initState(); _loadProperties(); _loadBuyers(); }
-
-  @override
-  void dispose() { _pageController.dispose(); _searchController.dispose(); _priceFilterController.dispose(); super.dispose(); }
-
-  Future<void> _loadProperties() async {
-    setState(() => _isLoading = true);
-    final data = await DatabaseHelper.instance.getAllProperties();
-    setState(() { _properties = List<Map<String, dynamic>>.from(data); _isLoading = false; });
-  }
-
-  Future<void> _loadBuyers() async {
-    setState(() => _isLoadingBuyers = true);
-    final data = await DatabaseHelper.instance.getAllBuyers();
-    setState(() { _buyers = List<Map<String, dynamic>>.from(data); _isLoadingBuyers = false; });
-  }
-
-  void _deleteProperty(Map<String, dynamic> property) async {
-    setState(() => _properties.removeWhere((p) => p['id'] == property['id']));
-    await DatabaseHelper.instance.moveToRecycleBin('crm_properties', property['id']);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).clearSnackBars(); 
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(behavior: SnackBarBehavior.floating, margin: const EdgeInsets.only(bottom: 80, left: 16, right: 16), content: const Text('အိမ်ခြံမြေစာရင်းကို ဖျက်လိုက်ပါပြီ'), duration: const Duration(seconds: 3), action: SnackBarAction(label: 'Undo (ပြန်ယူမည်)', textColor: Colors.yellow, onPressed: () async { await DatabaseHelper.instance.restoreFromRecycleBin('crm_properties', property['id']); _loadProperties(); })));
-    Future.delayed(const Duration(seconds: 3), () { if (mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar(); });
-  }
-
-  void _deleteBuyer(Map<String, dynamic> buyer) async {
-    setState(() => _buyers.removeWhere((b) => b['id'] == buyer['id']));
-    await DatabaseHelper.instance.moveToRecycleBin('crm_buyers', buyer['id']);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(behavior: SnackBarBehavior.floating, margin: const EdgeInsets.only(bottom: 80, left: 16, right: 16), content: const Text('ဝယ်လက်စာရင်းကို ဖျက်လိုက်ပါပြီ'), duration: const Duration(seconds: 3), action: SnackBarAction(label: 'Undo (ပြန်ယူမည်)', textColor: Colors.yellow, onPressed: () async { await DatabaseHelper.instance.restoreFromRecycleBin('crm_buyers', buyer['id']); _loadBuyers(); })));
-    Future.delayed(const Duration(seconds: 3), () { if (mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar(); });
-  }
-
-  void _onFilterCategoryChanged(String? categoryKey) async {
-    setState(() { _selectedFilterCategory = categoryKey; _selectedFilterValue = null; _currentSubFilterValues = []; _priceFilterController.clear(); });
-    if (categoryKey == 'status') { _currentSubFilterValues = ['Available', 'Pending', 'Sold Out']; } 
-    else if (categoryKey == 'location_id') { _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('location'); } 
-    else if (categoryKey == 'road_type') { _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('road_type'); }
-    else if (categoryKey == 'land_type') { _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('land_type'); }
-    setState(() {}); 
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return PopScope(
-      canPop: false, 
-      onPopInvoked: (didPop) { 
-        if (didPop) return; 
-        if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) { Navigator.of(context).pop(); } 
-        else if (_isSearching) { setState(() { _isSearching = false; _searchQuery = ''; _searchController.clear(); }); } 
-        else if (_currentIndex != 0) { _pageController.animateToPage(0, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut); } 
-        else { SystemNavigator.pop(); } 
-      },
-      child: Scaffold(
-        key: _scaffoldKey,
-        appBar: AppBar(
-          automaticallyImplyLeading: false, 
-          title: _isSearching && _currentIndex == 1 
-              ? TextField(controller: _searchController, autofocus: true, decoration: const InputDecoration(hintText: 'အမည်, နေရာ, ဈေးနှုန်း ရှာရန်...', border: InputBorder.none), onChanged: (val) => setState(() => _searchQuery = val))
-              : const Text('CRM Dashboard', style: TextStyle(fontWeight: FontWeight.bold)), 
-          actions: [ if (_currentIndex == 1) IconButton(icon: Icon(_isSearching ? Icons.close : Icons.search), onPressed: () { setState(() { _isSearching = !_isSearching; if (!_isSearching) { _searchQuery = ''; _searchController.clear(); } }); }) ]
-        ),
-        endDrawer: Drawer(
-          child: ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              const DrawerHeader(decoration: BoxDecoration(color: Color(0xFF008080)), child: Text('Options', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold))),
-              ListTile(leading: const Icon(Icons.people), title: const Text('Owner List'), onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (context) => const OwnerListScreen())); }),
-              ListTile(leading: const Icon(Icons.cloud_sync), title: const Text('Cloud Sync (Manual)'), onTap: () {}),
-              ListTile(leading: const Icon(Icons.delete_outline, color: Colors.red), title: const Text('Recycle Bin'), onTap: () async { Navigator.pop(context); final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const RecycleBinScreen())); if (result == true) { _loadProperties(); _loadBuyers(); } }),
-              ListTile(leading: const Icon(Icons.settings), title: const Text('Settings'), onTap: () {}),
-            ],
-          ),
-        ),
-        body: PageView(controller: _pageController, onPageChanged: (index) { setState(() { _currentIndex = index; if (index == 0) { _isSearching = false; _searchQuery = ''; _searchController.clear(); } }); }, children: [ _buildHomeTab(), _buildBuyerTab() ]),
-        floatingActionButton: FloatingActionButton(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Theme.of(context).colorScheme.onPrimary, onPressed: () async { if (_currentIndex == 0) { final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const PropertyFormScreen())); if (result == true) _loadProperties(); } else if (_currentIndex == 1) { final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const BuyerFormScreen())); if (result == true) _loadBuyers(); } }, child: const Icon(Icons.add)),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: _currentIndex == 2 ? 0 : _currentIndex, 
-          onDestinationSelected: (index) { if (index == 2) { _scaffoldKey.currentState?.openEndDrawer(); } else { _pageController.animateToPage(index, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut); } },
-          destinations: const [NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'), NavigationDestination(icon: Icon(Icons.person_search_outlined), selectedIcon: Icon(Icons.person_search), label: 'Buyer'), NavigationDestination(icon: Icon(Icons.menu), label: 'Option')],
+  // --- ဓာတ်ပုံကို Screen အပြည့်ကြည့်ရန် Function ---
+  void _openFullScreenImages(BuildContext context, List<String> photos, int initialIndex) {
+    Navigator.push(context, MaterialPageRoute(builder: (context) => Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(backgroundColor: Colors.black, iconTheme: const IconThemeData(color: Colors.white), title: Text('${initialIndex + 1} / ${photos.length}', style: const TextStyle(color: Colors.white))),
+      body: PageView.builder(
+        controller: PageController(initialPage: initialIndex),
+        itemCount: photos.length,
+        itemBuilder: (context, index) => InteractiveViewer(
+          minScale: 0.5, maxScale: 4.0, // လက်နှစ်ချောင်းဖြင့် ချဲ့ကြည့်နိုင်ရန်
+          child: Center(child: Image.file(File(photos[index]), fit: BoxFit.contain, errorBuilder: (c, e, s) => const Icon(Icons.broken_image, color: Colors.white, size: 100))),
         ),
       ),
-    );
+    )));
   }
 
-  Widget _buildHomeTab() {
-    if (_isLoading) return const Center(child: CircularProgressIndicator());
-    List<Map<String, dynamic>> filteredProperties = _properties;
-    if (_selectedFilterCategory != null) {
-      filteredProperties = _properties.where((p) {
-        if (_selectedFilterCategory == 'asking_price_lakhs') {
-          int maxPrice = int.tryParse(_priceFilterController.text) ?? 0;
-          if (maxPrice == 0) return true;
-          int price = p['asking_price_lakhs'] ?? 0;
-          return price <= maxPrice;
-        }
-        if (_selectedFilterValue != null) return p[_selectedFilterCategory] == _selectedFilterValue;
-        return true;
-      }).toList();
-    }
+  void _showExpandedCard(BuildContext context) {
+    showModalBottomSheet(context: context, isScrollControlled: true, shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (bottomSheetContext) { 
+        final formattedPrice = (property['asking_price_lakhs'] ?? 0).toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
+        final houseType = property['house_type'];
+        final hasHouse = houseType != null && houseType.toString().isNotEmpty;
+        final relativeTime = TimeHelper.getRelativeTime(property['updated_at']); 
 
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), color: Theme.of(context).cardColor,
-          child: Row(
-            children: [
-              Expanded(flex: 5, child: DropdownButtonHideUnderline(child: DropdownButton<String>(isExpanded: true, hint: const Text('Filter By', style: TextStyle(fontWeight: FontWeight.bold)), value: _selectedFilterCategory, icon: const Icon(Icons.filter_list, size: 20), items: _filterCategories.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value, style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis))).toList(), onChanged: _onFilterCategoryChanged))), const SizedBox(width: 8), Container(width: 1, height: 24, color: Colors.grey.shade300), const SizedBox(width: 8),
-              Expanded(flex: 5, child: _selectedFilterCategory == 'asking_price_lakhs' ? TextField(controller: _priceFilterController, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText: 'အများဆုံး (သိန်း)', border: InputBorder.none, isDense: true), onChanged: (val) => setState(() {})) : DropdownButtonHideUnderline(child: DropdownButton<String>(isExpanded: true, hint: const Text('ရွေးချယ်ရန်'), value: _selectedFilterValue, items: _currentSubFilterValues.map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis))).toList(), onChanged: _selectedFilterCategory == null ? null : (val) => setState(() => _selectedFilterValue = val)))),
-              if (_selectedFilterCategory != null) IconButton(icon: const Icon(Icons.cancel, color: Colors.grey, size: 20), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: () => setState(() { _selectedFilterCategory = null; _selectedFilterValue = null; _currentSubFilterValues = []; _priceFilterController.clear(); }))
-            ],
-          ),
-        ),
-        Expanded(
-          child: filteredProperties.isEmpty
-              ? const Center(child: Text('စာရင်းမရှိပါ', style: TextStyle(color: Colors.grey)))
-              : ListView.builder(padding: const EdgeInsets.only(top: 8, bottom: 80), itemCount: filteredProperties.length, itemBuilder: (context, index) { return PropertyMiniCard(property: filteredProperties[index], isSynced: false, onDelete: () => _deleteProperty(filteredProperties[index]), onEditCompleted: () => _loadProperties()); }),
-        ),
-      ],
-    );
+        List<String> photos = [];
+        try {
+          final extraData = jsonDecode(property['extra_data'] ?? '{}');
+          if (extraData['photos'] != null) photos = List<String>.from(extraData['photos']);
+        } catch (_) {}
+
+        return Padding(padding: const EdgeInsets.only(bottom: 24, top: 12, left: 16, right: 16), child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))), const SizedBox(height: 16),
+          
+          // --- ဓာတ်ပုံပြသမည့် နေရာ ---
+          if (photos.isEmpty)
+            Container(height: 180, width: double.infinity, decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(8)), child: const Center(child: Icon(Icons.photo_library, size: 40, color: Colors.grey)))
+          else
+            SizedBox(height: 220, width: double.infinity, child: PageView.builder(itemCount: photos.length, itemBuilder: (context, index) => GestureDetector(
+              onTap: () => _openFullScreenImages(context, photos, index),
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                child: ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.file(File(photos[index]), fit: BoxFit.cover, errorBuilder: (c, e, s) => const Center(child: Icon(Icons.broken_image)))),
+              ),
+            ))),
+
+          const SizedBox(height: 16),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(property['title'] ?? 'အမည်မသိ', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)), Text(relativeTime, style: const TextStyle(fontSize: 12, color: Colors.grey))])),
+            IconButton(icon: const Icon(Icons.map, color: Colors.blue), onPressed: () async {
+              final mapLink = property['map_link'];
+              if (mapLink != null && mapLink.toString().isNotEmpty) {
+                final Uri url = Uri.parse(mapLink.toString());
+                try { await launchUrl(url, mode: LaunchMode.externalApplication); } catch (_) { if (bottomSheetContext.mounted) ScaffoldMessenger.of(bottomSheetContext).showSnackBar(const SnackBar(content: Text('မြေပုံ ဖွင့်၍ မရပါ'))); }
+              }
+            })
+          ]),
+          const SizedBox(height: 8),
+          Text(hasHouse ? '${property['land_type'] ?? '-'} • ${property['road_type'] ?? '-'} • $houseType' : '${property['land_type'] ?? '-'} • ${property['road_type'] ?? '-'}', style: const TextStyle(fontSize: 14, color: Colors.grey)), const SizedBox(height: 16),
+          Text('$formattedPrice သိန်း', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)), const SizedBox(height: 8),
+          Text('${property['east_ft'] ?? 0} | ${property['west_ft'] ?? 0} | ${property['south_ft'] ?? 0} | ${property['north_ft'] ?? 0}', style: const TextStyle(fontSize: 16, letterSpacing: 2.0)), const SizedBox(height: 24),
+          Row(children: [
+            Expanded(child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Colors.white), onPressed: () { Navigator.pop(bottomSheetContext); final ownerId = property['owner_id']; if (ownerId != null) Navigator.push(context, MaterialPageRoute(builder: (_) => OwnerListScreen(highlightOwnerId: ownerId))); }, child: const Text('OWNER', style: TextStyle(fontWeight: FontWeight.bold)))), const SizedBox(width: 12),
+            Expanded(child: OutlinedButton(style: OutlinedButton.styleFrom(side: BorderSide(color: Theme.of(context).colorScheme.primary)), onPressed: () async { Navigator.pop(bottomSheetContext); final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => PropertyFormScreen(editData: property))); if (result == true) onEditCompleted(); }, child: Text('Edit', style: TextStyle(color: Theme.of(context).colorScheme.primary)))), const SizedBox(width: 12),
+            IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red), onPressed: () { Navigator.pop(bottomSheetContext); onDelete(); })
+          ])
+        ]));
+      });
   }
 
-  Widget _buildBuyerTab() {
-    if (_isLoadingBuyers) return const Center(child: CircularProgressIndicator());
-    final parsedBudget = int.tryParse(_searchQuery);
-    final filteredBuyers = _searchQuery.isEmpty ? _buyers : _buyers.where((b) {
-            final matchText = (b['name'] ?? '').toString().toLowerCase().contains(_searchQuery.toLowerCase()) || (b['preferred_location'] ?? '').toString().toLowerCase().contains(_searchQuery.toLowerCase());
-            if (parsedBudget != null) return matchText || ((b['budget_lakhs'] ?? 0) <= parsedBudget);
-            return matchText;
-          }).toList();
+  @override
+  Widget build(BuildContext context) {
+    final title = property['title'] ?? 'အမည်မသိ'; final askingPriceLakhs = property['asking_price_lakhs'] ?? 0; final location = property['location_id'] ?? 'မသိရ'; final status = property['status'] ?? 'Available'; final east = property['east_ft'] ?? 0; final west = property['west_ft'] ?? 0; final south = property['south_ft'] ?? 0; final north = property['north_ft'] ?? 0;
+    final bool isAvailable = status.toLowerCase() == 'available';
+    final Color statusBgColor = status.toLowerCase() == 'sold out' ? Colors.red.shade50 : isAvailable ? const Color(0xFFE6F4EA) : Colors.orange.shade50;
+    final Color statusTextColor = status.toLowerCase() == 'sold out' ? Colors.red : isAvailable ? const Color(0xFF137333) : Colors.orange.shade800;
+    final String formattedPrice = askingPriceLakhs.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
+    final relativeTime = TimeHelper.getRelativeTime(property['updated_at']); 
 
-    if (filteredBuyers.isEmpty) return Center(child: Text(_searchQuery.isEmpty ? 'ဝယ်လက်စာရင်း မရှိသေးပါ။' : 'မတွေ့ပါ', textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)));
-    return ListView.builder(
-      padding: const EdgeInsets.only(top: 8, bottom: 80), itemCount: filteredBuyers.length,
-      itemBuilder: (context, index) {
-        final buyer = filteredBuyers[index];
-        List<dynamic> phones = []; try { phones = jsonDecode(buyer['phones'] ?? '[]'); } catch (_) {}
-        final budget = (buyer['budget_lakhs'] ?? 0).toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
-        final relativeTime = TimeHelper.getRelativeTime(buyer['updated_at']); 
-        return Card(margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Expanded(child: Text(buyer['name'] ?? 'အမည်မသိ', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))), Text(relativeTime, style: const TextStyle(fontSize: 11, color: Colors.grey)), const SizedBox(width: 8), IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20), onPressed: () => _deleteBuyer(buyer), constraints: const BoxConstraints(), padding: EdgeInsets.zero)]),
-                const SizedBox(height: 8),
-                Text('$budget သိန်း • ${buyer['preferred_location']}', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 15)),
-                const SizedBox(height: 6),
-                if (phones.isNotEmpty) InkWell(onTap: () => launchUrl(Uri.parse('tel:${phones.first}')), child: Text(phones.join(', '), style: const TextStyle(color: Colors.blue, decoration: TextDecoration.underline))),
-                const SizedBox(height: 8),
-                Align(alignment: Alignment.centerRight, child: OutlinedButton(onPressed: () async { final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => BuyerFormScreen(editData: buyer))); if (result == true) _loadBuyers(); }, style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0), minimumSize: const Size(60, 30), side: BorderSide(color: Theme.of(context).colorScheme.primary)), child: Text('Edit', style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.primary))))
-        ])));
-      }
-    );
+    return InkWell(onTap: () => _showExpandedCard(context), borderRadius: BorderRadius.circular(8), child: Card(margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), elevation: 1, child: Padding(padding: const EdgeInsets.all(12.0), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16), maxLines: 1, overflow: TextOverflow.ellipsis)), const SizedBox(width: 8), Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: statusBgColor, borderRadius: BorderRadius.circular(4)), child: Text(status, style: TextStyle(color: statusTextColor, fontSize: 10, fontWeight: FontWeight.bold)))]), const SizedBox(height: 8),
+      Text('$formattedPrice သိန်း • $location', style: TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600)), const SizedBox(height: 8),
+      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text('$east | $west | $south | $north', style: const TextStyle(fontSize: 13, color: Colors.grey, letterSpacing: 1.2)), Row(children: [Text(relativeTime, style: const TextStyle(fontSize: 11, color: Colors.grey)), const SizedBox(width: 8), Icon(isSynced ? Icons.cloud_done : Icons.cloud_upload, size: 16, color: isSynced ? Colors.grey.shade400 : Theme.of(context).colorScheme.primary)])])
+    ]))));
   }
 }
