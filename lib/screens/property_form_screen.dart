@@ -37,8 +37,6 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
   String? _houseType; 
   String _status = 'Available'; 
   String? _propertyBaseType; 
-  
-  // ပိုင်ရှင် Logic များ
   String? _selectedOwnerId;
   String? _selectedOwnerName;
 
@@ -65,11 +63,8 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
       _landType = d['land_type'];
       _houseType = d['house_type'];
       _propertyBaseType = (_houseType != null && _houseType!.isNotEmpty) ? 'အိမ်ပါသည်' : 'မြေကွက်သီးသန့်';
-      
-      // ပိုင်ရှင် ID ထည့်သွင်းခြင်း
       _selectedOwnerId = d['owner_id'];
       if (_selectedOwnerId != null) _loadOwnerName(_selectedOwnerId!);
-
       if (d['extra_data'] != null) {
         try {
           final extraData = jsonDecode(d['extra_data']);
@@ -106,8 +101,17 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
   void _showImageSourceActionSheet(BuildContext context) {
     showModalBottomSheet(context: context, shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (context) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        ListTile(leading: const Icon(Icons.camera_alt), title: const Text('ကင်မရာဖြင့် ရိုက်မည်'), onTap: () async { Navigator.pop(context); _processPickedFile(await _picker.pickImage(source: ImageSource.camera)); }),
-        ListTile(leading: const Icon(Icons.photo_library), title: const Text('ဂယ်လာရီမှ ရွေးမည်'), onTap: () async { Navigator.pop(context); final List<XFile> images = await _picker.pickMultiImage(); for (var img in images) { await _processPickedFile(img); } }),
+        ListTile(leading: const Icon(Icons.camera_alt), title: const Text('ကင်မရာဖြင့် ရိုက်မည်'), onTap: () async {
+          Navigator.pop(context);
+          // ဓာတ်ပုံ အရွယ်အစား ချုံ့ရန် maxWidth နှင့် imageQuality ထည့်ထားသည်
+          final XFile? photo = await _picker.pickImage(source: ImageSource.camera, maxWidth: 1024, imageQuality: 70);
+          _processPickedFile(photo);
+        }),
+        ListTile(leading: const Icon(Icons.photo_library), title: const Text('ဂယ်လာရီမှ ရွေးမည်'), onTap: () async {
+          Navigator.pop(context);
+          final List<XFile> images = await _picker.pickMultiImage(maxWidth: 1024, imageQuality: 70);
+          for (var img in images) { await _processPickedFile(img); }
+        }),
       ])));
   }
 
@@ -140,7 +144,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
         'road_type': _roadType,
         'land_type': _landType,
         'location_id': _location ?? 'မသိရ',
-        'owner_id': _selectedOwnerId, // ပိုင်ရှင် ID သိမ်းဆည်းခြင်း
+        'owner_id': _selectedOwnerId,
         'remark': _remarkController.text,
         'map_link': _mapLinkController.text, 
         'is_deleted': 0,
@@ -178,31 +182,11 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
         Row(children: [Expanded(child: TextFormField(controller: _eastController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'အရှေ့'))), const SizedBox(width: 16), Expanded(child: TextFormField(controller: _westController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'အနောက်')))]), const SizedBox(height: 16),
         Row(children: [Expanded(child: TextFormField(controller: _southController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'တောင်'))), const SizedBox(width: 16), Expanded(child: TextFormField(controller: _northController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'မြောက်')))]), const SizedBox(height: 16),
         Row(children: [Expanded(child: DynamicDropdown(label: 'လမ်းအမျိုးအစား', category: 'road_type', selectedValue: _roadType, onChanged: (v) => setState(() => _roadType = v))), const SizedBox(width: 16), Expanded(child: DynamicDropdown(label: 'မြေအမျိုးအစား', category: 'land_type', selectedValue: _landType, onChanged: (v) => setState(() => _landType = v)))]), const SizedBox(height: 24),
-        
-        // --- ပိုင်ရှင်ရွေးချယ်ရန် အကွက် (Restored) ---
         const Text('ပိုင်ရှင်အချက်အလက်', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)), const SizedBox(height: 8),
-        // (ရှေ့ပိုင်း Code များတူညီပါသည်...)
-        InkWell(
-          onTap: () => _showOwnerSelectionSheet(context), borderRadius: BorderRadius.circular(8),
-          child: InputDecorator(
-            decoration: InputDecoration(labelText: 'ပိုင်ရှင်', prefixIcon: const Icon(Icons.person), suffixIcon: const Icon(Icons.arrow_drop_down), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))), 
-            child: Text(
-              _selectedOwnerName ?? 'ပိုင်ရှင် ရွေးချယ်ပါ', 
-              style: TextStyle(
-                // Font အရောင်ကို ကျန်တဲ့ Input တွေနဲ့ တူအောင် Theme အတိုင်း ထားလိုက်ပါသည်
-                color: _selectedOwnerName == null ? Colors.grey : Theme.of(context).textTheme.bodyLarge?.color,
-                fontSize: 16
-              )
-            )
-          ),
-        ),
-// (နောက်ပိုင်း Code များတူညီပါသည်...)
-
+        InkWell(onTap: () => _showOwnerSelectionSheet(context), borderRadius: BorderRadius.circular(8), child: InputDecorator(decoration: InputDecoration(labelText: 'ပိုင်ရှင်', prefixIcon: const Icon(Icons.person), suffixIcon: const Icon(Icons.arrow_drop_down), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))), child: Text(_selectedOwnerName ?? 'ပိုင်ရှင် ရွေးချယ်ပါ', style: TextStyle(color: _selectedOwnerName == null ? Colors.grey : Theme.of(context).textTheme.bodyLarge?.color, fontSize: 16)))),
         const SizedBox(height: 16),
-        
         TextFormField(controller: _mapLinkController, decoration: const InputDecoration(labelText: 'မြေပုံလင့်ခ် (Google Maps URL)', prefixIcon: Icon(Icons.map))),
         const SizedBox(height: 24),
-        
         const Text('ဓာတ်ပုံများ', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)), const SizedBox(height: 8),
         _imagePaths.isEmpty
             ? InkWell(onTap: () => _showImageSourceActionSheet(context), child: Container(height: 100, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade400)), child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.add_a_photo, color: Colors.grey, size: 32), Text('ဓာတ်ပုံများ ထည့်ရန်', style: TextStyle(color: Colors.grey))])))
@@ -231,7 +215,6 @@ class _OwnerSelectionSheetState extends State<_OwnerSelectionSheet> {
   final TextEditingController _searchController = TextEditingController();
   @override
   void initState() { super.initState(); owners = widget.initialOwners; }
-  
   void _goToAddOwner() async {
     final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const OwnerFormScreen()));
     if (result == true) {
@@ -239,7 +222,6 @@ class _OwnerSelectionSheetState extends State<_OwnerSelectionSheet> {
       if (mounted) { setState(() => owners = updatedOwners); if (owners.isNotEmpty) { widget.onOwnerSelected(owners.first['id'], owners.first['name']); Navigator.pop(context); } }
     }
   }
-
   @override
   Widget build(BuildContext context) {
     final filtered = owners.where((o) => (o['name'] as String).toLowerCase().contains(_searchController.text.toLowerCase())).toList();
