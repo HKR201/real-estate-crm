@@ -77,12 +77,11 @@ class _MainDashboardState extends State<MainDashboard> {
     _loadBuyers(); 
   }
 
-  // ဤနေရာတွင် Database မှ ရလာသော Read-only စာရင်းများကို List.from() သုံး၍ ပြင်ဆင်ဖျက်ဆီးနိုင်သော စာရင်းအဖြစ်သို့ ပြောင်းလဲထားပါသည် (Fix)
   Future<void> _loadProperties() async {
     setState(() => _isLoading = true);
     final data = await DatabaseHelper.instance.getAllProperties();
     setState(() {
-      _properties = List<Map<String, dynamic>>.from(data); // Fix
+      _properties = List<Map<String, dynamic>>.from(data);
       _isLoading = false;
     });
   }
@@ -91,20 +90,39 @@ class _MainDashboardState extends State<MainDashboard> {
     setState(() => _isLoadingBuyers = true);
     final data = await DatabaseHelper.instance.getAllBuyers();
     setState(() {
-      _buyers = List<Map<String, dynamic>>.from(data); // Fix
+      _buyers = List<Map<String, dynamic>>.from(data);
       _isLoadingBuyers = false;
     });
   }
 
-  // --- ဝယ်လက်စာရင်းကို အမှိုက်ပုံးထဲပို့မည့် Function (Soft Delete) ---
+  // --- အိမ်ခြံမြေစာရင်း ဖျက်မည့် Function အသစ် ---
+  void _deleteProperty(Map<String, dynamic> property) async {
+    setState(() {
+      _properties.removeWhere((p) => p['id'] == property['id']);
+    });
+    await DatabaseHelper.instance.moveToRecycleBin('crm_properties', property['id']);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('အိမ်ခြံမြေစာရင်းကို ဖျက်လိုက်ပါပြီ'),
+        duration: const Duration(seconds: 5), 
+        action: SnackBarAction(
+          label: 'Undo (ပြန်ယူမည်)',
+          textColor: Colors.yellow,
+          onPressed: () async {
+            await DatabaseHelper.instance.restoreFromRecycleBin('crm_properties', property['id']);
+            _loadProperties(); 
+          },
+        ),
+      ),
+    );
+  }
+
   void _deleteBuyer(Map<String, dynamic> buyer) async {
-    // မျက်စိရှေ့မှ ချက်ချင်း ဖျောက်လိုက်မည် (ယခုအခါ အလုပ်လုပ်သွားပါပြီ)
     setState(() {
       _buyers.removeWhere((b) => b['id'] == buyer['id']);
     });
-
     await DatabaseHelper.instance.moveToRecycleBin('crm_buyers', buyer['id']);
-
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -210,7 +228,11 @@ class _MainDashboardState extends State<MainDashboard> {
       padding: const EdgeInsets.only(top: 8, bottom: 80), 
       itemCount: _properties.length, 
       itemBuilder: (context, index) {
-        return PropertyMiniCard(property: _properties[index], isSynced: false);
+        return PropertyMiniCard(
+          property: _properties[index], 
+          isSynced: false,
+          onDelete: () => _deleteProperty(_properties[index]), // ဤနေရာတွင် Property အတွက် ဖျက်မည့် Function ချိတ်ဆက်လိုက်ပါသည်
+        );
       },
     );
   }
