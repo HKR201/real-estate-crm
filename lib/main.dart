@@ -59,6 +59,7 @@ class _MainDashboardState extends State<MainDashboard> {
     'asking_price_lakhs': 'ခေါ်ဈေးနှုန်း',
     'location_id': 'မြို့နယ်/တည်နေရာ',
     'road_type': 'လမ်းအမျိုးအစား',
+    'house_type': 'အိမ်အမျိုးအစား', // <--- ပြန်ထည့်ပေးထားပါသည်
     'land_type': 'မြေအမျိုးအစား',
     'status': 'Status'
   };
@@ -85,17 +86,17 @@ class _MainDashboardState extends State<MainDashboard> {
     setState(() { _buyers = List<Map<String, dynamic>>.from(data); _isLoadingBuyers = false; });
   }
 
-  // Snackbar 3s Force Fix
   void _showAutoCloseSnackBar(String message, VoidCallback? onUndo) {
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    scaffoldMessenger.clearSnackBars();
+    scaffoldMessenger.showSnackBar(SnackBar(
       behavior: SnackBarBehavior.floating,
       margin: const EdgeInsets.only(bottom: 80, left: 16, right: 16),
       content: Text(message),
       duration: const Duration(seconds: 3),
       action: onUndo != null ? SnackBarAction(label: 'Undo', textColor: Colors.yellow, onPressed: onUndo) : null,
     ));
-    Future.delayed(const Duration(seconds: 3), () { if (mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar(); });
+    Future.delayed(const Duration(seconds: 3), () => scaffoldMessenger.hideCurrentSnackBar());
   }
 
   void _deleteProperty(Map<String, dynamic> property) async {
@@ -117,6 +118,7 @@ class _MainDashboardState extends State<MainDashboard> {
     if (categoryKey == 'status') { _currentSubFilterValues = ['Available', 'Pending', 'Sold Out']; } 
     else if (categoryKey == 'location_id') { _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('location'); } 
     else if (categoryKey == 'road_type') { _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('road_type'); }
+    else if (categoryKey == 'house_type') { _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('house_type'); }
     else if (categoryKey == 'land_type') { _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('land_type'); }
     setState(() {}); 
   }
