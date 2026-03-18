@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart'; 
 import '../screens/property_form_screen.dart'; 
-import '../screens/owner_list_screen.dart'; // <--- Owner List ကို ချိတ်ဆက်လိုက်သည်
+import '../screens/owner_list_screen.dart'; 
+import '../utils/time_helper.dart'; // <--- အချိန်ပြောင်းသည့်ဖိုင်ကို ချိတ်ဆက်ထားသည်
 
 class PropertyMiniCard extends StatelessWidget {
   final Map<String, dynamic> property; 
@@ -18,6 +19,7 @@ class PropertyMiniCard extends StatelessWidget {
         final formattedPrice = (property['asking_price_lakhs'] ?? 0).toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
         final houseType = property['house_type'];
         final hasHouse = houseType != null && houseType.toString().isNotEmpty;
+        final relativeTime = TimeHelper.getRelativeTime(property['updated_at']); // <--- အချိန်ထုတ်ယူခြင်း
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 24, top: 12, left: 16, right: 16),
@@ -29,7 +31,15 @@ class PropertyMiniCard extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Expanded(child: Text(property['title'] ?? 'အမည်မသိ', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold))),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(property['title'] ?? 'အမည်မသိ', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                        Text(relativeTime, style: const TextStyle(fontSize: 12, color: Colors.grey)), // <--- Title အောက်တွင် အချိန်ပြမည်
+                      ],
+                    )
+                  ),
                   IconButton(
                     icon: const Icon(Icons.map, color: Colors.blue), 
                     onPressed: () async {
@@ -46,6 +56,7 @@ class PropertyMiniCard extends StatelessWidget {
                   )
                 ],
               ),
+              const SizedBox(height: 8),
               Text(hasHouse ? '${property['land_type'] ?? '-'} • ${property['road_type'] ?? '-'} • $houseType' : '${property['land_type'] ?? '-'} • ${property['road_type'] ?? '-'}', style: const TextStyle(fontSize: 14, color: Colors.grey)), const SizedBox(height: 16),
               Text('$formattedPrice သိန်း', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)), const SizedBox(height: 8),
               Text('${property['east_ft'] ?? 0} | ${property['west_ft'] ?? 0} | ${property['south_ft'] ?? 0} | ${property['north_ft'] ?? 0}', style: const TextStyle(fontSize: 16, letterSpacing: 2.0)), const SizedBox(height: 24),
@@ -55,14 +66,12 @@ class PropertyMiniCard extends StatelessWidget {
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Colors.white), 
                       onPressed: () { 
-                        Navigator.pop(bottomSheetContext); // ကတ်ကို အရင်ပိတ်မည်
-                        
+                        Navigator.pop(bottomSheetContext); 
                         final ownerId = property['owner_id'];
                         if (ownerId == null || ownerId.toString().isEmpty) { 
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(behavior: SnackBarBehavior.floating, content: Text('ဤအိမ်ခြံမြေအတွက် ပိုင်ရှင် ချိတ်ဆက်ထားခြင်း မရှိပါ'))); 
                           return; 
                         }
-                        // --- Owner List သို့ Redirect လုပ်မည် (ပိုင်ရှင်ကို အရောင်ခြယ်ပြမည်) ---
                         Navigator.push(context, MaterialPageRoute(builder: (_) => OwnerListScreen(highlightOwnerId: ownerId)));
                       }, 
                       child: const Text('OWNER', style: TextStyle(fontWeight: FontWeight.bold))
@@ -86,6 +95,7 @@ class PropertyMiniCard extends StatelessWidget {
     final Color statusBgColor = status.toLowerCase() == 'sold out' ? Colors.red.shade50 : isAvailable ? const Color(0xFFE6F4EA) : Colors.orange.shade50;
     final Color statusTextColor = status.toLowerCase() == 'sold out' ? Colors.red : isAvailable ? const Color(0xFF137333) : Colors.orange.shade800;
     final String formattedPrice = askingPriceLakhs.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
+    final relativeTime = TimeHelper.getRelativeTime(property['updated_at']); // <--- Mini Card အတွက် အချိန်
 
     return InkWell(
       onTap: () => _showExpandedCard(context), borderRadius: BorderRadius.circular(8),
@@ -98,7 +108,19 @@ class PropertyMiniCard extends StatelessWidget {
             children: [
               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16), maxLines: 1, overflow: TextOverflow.ellipsis)), const SizedBox(width: 8), Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: statusBgColor, borderRadius: BorderRadius.circular(4)), child: Text(status, style: TextStyle(color: statusTextColor, fontSize: 10, fontWeight: FontWeight.bold)))]), const SizedBox(height: 8),
               Text('$formattedPrice သိန်း • $location', style: TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600)), const SizedBox(height: 8),
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text('$east | $west | $south | $north', style: const TextStyle(fontSize: 13, color: Colors.grey, letterSpacing: 1.2)), Icon(isSynced ? Icons.cloud_done : Icons.cloud_upload, size: 16, color: isSynced ? Colors.grey.shade400 : Theme.of(context).colorScheme.primary)]),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween, 
+                children: [
+                  Text('$east | $west | $south | $north', style: const TextStyle(fontSize: 13, color: Colors.grey, letterSpacing: 1.2)), 
+                  Row(
+                    children: [
+                      Text(relativeTime, style: const TextStyle(fontSize: 11, color: Colors.grey)), // <--- အောက်ခြေတွင် အချိန်ပြမည်
+                      const SizedBox(width: 8),
+                      Icon(isSynced ? Icons.cloud_done : Icons.cloud_upload, size: 16, color: isSynced ? Colors.grey.shade400 : Theme.of(context).colorScheme.primary),
+                    ],
+                  )
+                ]
+              ),
             ],
           ),
         ),
