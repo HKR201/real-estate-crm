@@ -53,10 +53,10 @@ class RealEstateCrmApp extends StatelessWidget {
         seedColor: isDark ? const Color(0xFF4DB6AC) : const Color(0xFF008080),
         brightness: brightness,
         surface: isDark ? const Color(0xFF1E2626) : const Color(0xFFFFFFFF),
-        // Deprecated မဖြစ်စေရန် background အစား surface တွင်သာ အဓိက အရောင်များ သုံးထားပါသည်
       ),
       scaffoldBackgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F8F8),
-      cardTheme: CardTheme(
+      // Error တက်နေသော CardTheme အား CardThemeData ဖြင့် ပြင်ဆင်ထားပါသည်
+      cardTheme: CardThemeData(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         elevation: 2,
       ),
