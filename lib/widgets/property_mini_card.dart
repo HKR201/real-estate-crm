@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'dart:io'; // <--- File ကိုအသုံးပြုရန်
 import 'package:url_launcher/url_launcher.dart'; 
 import '../screens/property_form_screen.dart'; 
 import '../screens/owner_list_screen.dart'; 
-import '../utils/time_helper.dart'; // <--- အချိန်ပြောင်းသည့်ဖိုင်ကို ချိတ်ဆက်ထားသည်
+import '../utils/time_helper.dart'; 
 
 class PropertyMiniCard extends StatelessWidget {
   final Map<String, dynamic> property; 
@@ -19,7 +21,16 @@ class PropertyMiniCard extends StatelessWidget {
         final formattedPrice = (property['asking_price_lakhs'] ?? 0).toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
         final houseType = property['house_type'];
         final hasHouse = houseType != null && houseType.toString().isNotEmpty;
-        final relativeTime = TimeHelper.getRelativeTime(property['updated_at']); // <--- အချိန်ထုတ်ယူခြင်း
+        final relativeTime = TimeHelper.getRelativeTime(property['updated_at']); 
+
+        // --- Database မှ ဓာတ်ပုံများကို ဆွဲထုတ်ခြင်း ---
+        List<String> photos = [];
+        try {
+          final extraData = jsonDecode(property['extra_data'] ?? '{}');
+          if (extraData['photos'] != null) {
+            photos = List<String>.from(extraData['photos']);
+          }
+        } catch (_) {}
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 24, top: 12, left: 16, right: 16),
@@ -27,7 +38,38 @@ class PropertyMiniCard extends StatelessWidget {
             mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))), const SizedBox(height: 16),
-              Container(height: 180, width: double.infinity, decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(8)), child: const Center(child: Icon(Icons.photo_library, size: 40, color: Colors.grey))), const SizedBox(height: 16),
+              
+              // --- ဓာတ်ပုံများ ပြသမည့် နေရာ (အသစ်) ---
+              if (photos.isEmpty)
+                Container(height: 180, width: double.infinity, decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(8)), child: const Center(child: Icon(Icons.photo_library, size: 40, color: Colors.grey)))
+              else
+                SizedBox(
+                  height: 200, width: double.infinity,
+                  child: Stack(
+                    children: [
+                      PageView.builder(
+                        itemCount: photos.length,
+                        itemBuilder: (context, index) {
+                          return ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.file(File(photos[index]), fit: BoxFit.cover, width: double.infinity),
+                          );
+                        }
+                      ),
+                      if (photos.length > 1)
+                        Positioned(
+                          bottom: 8, right: 8,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(12)),
+                            child: Text('${photos.length} Photos', style: const TextStyle(color: Colors.white, fontSize: 12)),
+                          )
+                        )
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 16),
+
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -36,7 +78,7 @@ class PropertyMiniCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(property['title'] ?? 'အမည်မသိ', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                        Text(relativeTime, style: const TextStyle(fontSize: 12, color: Colors.grey)), // <--- Title အောက်တွင် အချိန်ပြမည်
+                        Text(relativeTime, style: const TextStyle(fontSize: 12, color: Colors.grey)), 
                       ],
                     )
                   ),
@@ -95,7 +137,7 @@ class PropertyMiniCard extends StatelessWidget {
     final Color statusBgColor = status.toLowerCase() == 'sold out' ? Colors.red.shade50 : isAvailable ? const Color(0xFFE6F4EA) : Colors.orange.shade50;
     final Color statusTextColor = status.toLowerCase() == 'sold out' ? Colors.red : isAvailable ? const Color(0xFF137333) : Colors.orange.shade800;
     final String formattedPrice = askingPriceLakhs.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
-    final relativeTime = TimeHelper.getRelativeTime(property['updated_at']); // <--- Mini Card အတွက် အချိန်
+    final relativeTime = TimeHelper.getRelativeTime(property['updated_at']); 
 
     return InkWell(
       onTap: () => _showExpandedCard(context), borderRadius: BorderRadius.circular(8),
@@ -114,7 +156,7 @@ class PropertyMiniCard extends StatelessWidget {
                   Text('$east | $west | $south | $north', style: const TextStyle(fontSize: 13, color: Colors.grey, letterSpacing: 1.2)), 
                   Row(
                     children: [
-                      Text(relativeTime, style: const TextStyle(fontSize: 11, color: Colors.grey)), // <--- အောက်ခြေတွင် အချိန်ပြမည်
+                      Text(relativeTime, style: const TextStyle(fontSize: 11, color: Colors.grey)), 
                       const SizedBox(width: 8),
                       Icon(isSynced ? Icons.cloud_done : Icons.cloud_upload, size: 16, color: isSynced ? Colors.grey.shade400 : Theme.of(context).colorScheme.primary),
                     ],
