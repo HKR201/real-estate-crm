@@ -1,4 +1,4 @@
-flutterter: real_estate_crm
+name: real_estate_crm
 description: "A new Flutter project for Real Estate CRM."
 publish_to: 'none'
 version: 1.0.0+1
@@ -8,8 +8,7 @@ environment:
 
 dependencies:
   flutter:
-    sdk: flutcup
-  path_provider: ^2.1.2
+    sdk: flutter
   cupertino_icons: ^1.0.6
   supabase_flutter: ^2.5.4
   uuid: ^4.4.0
@@ -17,6 +16,7 @@ dependencies:
   path: ^1.9.0
   url_launcher: ^6.3.0
   image_picker: ^1.1.2
+  path_provider: ^2.1.2
 
 dev_dependencies:
   flutter_test:
