@@ -29,17 +29,36 @@ jobs:
       - name: ⚙️ အဆင့် (၄) - Android Engine ဖိုင်များ အလိုအလျောက် တည်ဆောက်ခြင်း
         run: flutter create --platforms=android --org com.tkr .
 
-      - name: 🌐 အဆင့် (၄.၅) - အင်တာနက် သုံးခွင့် (Internet Permission) အလိုအလျောက် ထည့်သွင်းခြင်း
+      - name: 🌐 အဆင့် (၄.၅) - အင်တာနက် သုံးခွင့် ထည့်သွင်းခြင်း
         run: sed -i '/<manifest/a \    <uses-permission android:name="android.permission.INTERNET"/>' android/app/src/main/AndroidManifest.xml
+
+      - name: 🛡️ အဆင့် (၄.၆) - Security Posture (ProGuard) အလိုအလျောက် ထည့်သွင်းခြင်း
+        run: |
+          # Proguard ဖိုင်ကို အလိုအလျောက် ဖန်တီးမည်
+          cat <<EOF > android/app/proguard-rules.pro
+          -keep class io.flutter.app.** { *; }
+          -keep class io.flutter.plugin.** { *; }
+          -keep class io.flutter.util.** { *; }
+          -keep class io.flutter.view.** { *; }
+          -keep class io.flutter.** { *; }
+          -keep class plugins.flutter.io.** { *; }
+          -keep class com.supabase.** { *; }
+          -keepattributes Signature
+          -keepattributes *Annotation*
+          EOF
+          
+          # build.gradle ထဲသို့ ProGuard လုံခြုံရေးစာကြောင်းများ ထိုးထည့်မည်
+          sed -i 's/signingConfig signingConfigs.debug/signingConfig signingConfigs.debug\n            minifyEnabled true\n            shrinkResources true\n            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"/g' android/app/build.gradle
 
       - name: 📦 အဆင့် (၅) - လိုအပ်သော Packages များ သွင်းခြင်း
         run: flutter pub get
 
-      - name: 🛠️ အဆင့် (၆) - APK ဖိုင် တည်ဆောက်ခြင်း (Secrets ချိတ်ဆက်ခြင်း)
+      - name: 🛠️ အဆင့် (၆) - APK ဖိုင် တည်ဆောက်ခြင်း (Code Obfuscation ပါဝင်သည်)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-        run: flutter build apk --release --dart-define=SUPABASE_URL="$SUPABASE_URL" --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
+        # --obfuscate နှင့် --split-debug-info ကိုသုံးပြီး Dart Code နှင့် Keys များကို ဖတ်မရအောင် ကာကွယ်ထားပါသည်
+        run: flutter build apk --release --obfuscate --split-debug-info=build/app/outputs/symbols --dart-define=SUPABASE_URL="$SUPABASE_URL" --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
         
       - name: 📤 အဆင့် (၇) - ထွက်လာသော APK ကို သိမ်းဆည်းပေးခြင်း
         uses: actions/upload-artifact@v4
