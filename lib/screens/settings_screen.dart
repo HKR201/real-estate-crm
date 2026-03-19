@@ -9,7 +9,8 @@ import 'package:archive/archive_io.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../db/database_helper.dart';
-import '../main.dart'; // themeNotifier ကို သုံးရန်
+import '../main.dart';
+import '../services/sync_service.dart'; // <--- Sync Service ကို ချိတ်ဆက်သည်
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -23,26 +24,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _currentTheme = 'system';
 
   @override
-  void initState() {
-    super.initState();
-    _loadCurrentTheme();
-  }
+  void initState() { super.initState(); _loadCurrentTheme(); }
 
   void _loadCurrentTheme() async {
     final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _currentTheme = prefs.getString('themeMode') ?? 'system';
-    });
+    setState(() { _currentTheme = prefs.getString('themeMode') ?? 'system'; });
   }
 
   void _updateTheme(String value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('themeMode', value);
     setState(() => _currentTheme = value);
-    
     if (value == 'light') themeNotifier.value = ThemeMode.light;
     else if (value == 'dark') themeNotifier.value = ThemeMode.dark;
     else themeNotifier.value = ThemeMode.system;
+  }
+
+  // --- Cloud Sync လုပ်ဆောင်မည့် Function ---
+  Future<void> _startCloudSync() async {
+    setState(() { _isProcessing = true; _statusMessage = "Cloud နှင့် ချိတ်ဆက်နေပါသည်..."; });
+    try {
+      await SyncService.syncAllData((msg) {
+        setState(() => _statusMessage = msg);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cloud Sync အောင်မြင်ပါသည်'), backgroundColor: Colors.green));
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Sync Error: $e'), backgroundColor: Colors.red));
+    } finally {
+      setState(() { _isProcessing = false; _statusMessage = ""; });
+    }
   }
 
   // (Export/Import Backup logic များသည် ယခင်အတိုင်းဖြစ်ပါသည်...)
@@ -54,30 +64,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final owners = await db.query('crm_owners');
       final buyers = await db.query('crm_buyers');
       final metadata = await db.query('crm_metadata');
-
-      Map<String, dynamic> jsonData = {
-        'properties': properties, 'owners': owners, 'buyers': buyers, 'metadata': metadata,
-      };
-
+      Map<String, dynamic> jsonData = { 'properties': properties, 'owners': owners, 'buyers': buyers, 'metadata': metadata };
       final appDir = await getApplicationDocumentsDirectory();
       final photosDir = Directory(p.join(appDir.path, 'property_photos'));
-      
       var encoder = ZipFileEncoder();
       final zipPath = p.join((await getTemporaryDirectory()).path, 'CRM_Full_Backup.zip');
       encoder.create(zipPath);
-
       final jsonFile = File(p.join((await getTemporaryDirectory()).path, 'data.json'));
       await jsonFile.writeAsString(jsonEncode(jsonData));
       encoder.addFile(jsonFile);
       if (await photosDir.exists()) encoder.addDirectory(photosDir);
       encoder.close();
-
       await Share.shareXFiles([XFile(zipPath)], text: 'Real Estate CRM Full Backup');
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-    } finally {
-      setState(() { _isProcessing = false; _statusMessage = ""; });
-    }
+    } catch (e) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'))); }
+    finally { setState(() { _isProcessing = false; _statusMessage = ""; }); }
   }
 
   Future<void> _importBackup() async {
@@ -90,7 +90,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final appDir = await getApplicationDocumentsDirectory();
       final db = await DatabaseHelper.instance.database;
       Map<String, dynamic>? jsonData;
-
       for (final file in archive) {
         if (file.isFile) {
           final data = file.content as List<int>;
@@ -101,22 +100,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
           }
         }
       }
-
       if (jsonData != null) {
         await db.transaction((txn) async {
           for (var k in ['properties', 'owners', 'buyers', 'metadata']) {
-            if (jsonData![k] != null) {
-              for (var item in jsonData[k]) await txn.insert('crm_$k', item, conflictAlgorithm: ConflictAlgorithm.replace);
-            }
+            if (jsonData![k] != null) { for (var item in jsonData[k]) await txn.insert('crm_$k', item, conflictAlgorithm: ConflictAlgorithm.replace); }
           }
         });
       }
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('အောင်မြင်စွာ ပြန်သွင်းပြီးပါပြီ'), backgroundColor: Colors.green));
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
-    } finally {
-      setState(() { _isProcessing = false; _statusMessage = ""; });
-    }
+    } catch (e) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red)); }
+    finally { setState(() { _isProcessing = false; _statusMessage = ""; }); }
   }
 
   @override
@@ -127,47 +120,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           ListView(
             children: [
-              // --- Theme Appearance ---
               const ListTile(title: Text('Appearance', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal))),
-              RadioListTile<String>(
-                title: const Text('System Default'),
-                value: 'system', groupValue: _currentTheme,
-                onChanged: (v) => _updateTheme(v!),
-              ),
-              RadioListTile<String>(
-                title: const Text('Light Mode'),
-                value: 'light', groupValue: _currentTheme,
-                onChanged: (v) => _updateTheme(v!),
-              ),
-              RadioListTile<String>(
-                title: const Text('Dark Mode'),
-                value: 'dark', groupValue: _currentTheme,
-                onChanged: (v) => _updateTheme(v!),
-              ),
+              RadioListTile<String>(title: const Text('System Default'), value: 'system', groupValue: _currentTheme, onChanged: (v) => _updateTheme(v!)),
+              RadioListTile<String>(title: const Text('Light Mode'), value: 'light', groupValue: _currentTheme, onChanged: (v) => _updateTheme(v!)),
+              RadioListTile<String>(title: const Text('Dark Mode'), value: 'dark', groupValue: _currentTheme, onChanged: (v) => _updateTheme(v!)),
               const Divider(),
-
-              // --- Cloud Sync (Manual) ---
               const ListTile(title: Text('Data Synchronization', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal))),
               ListTile(
                 leading: const Icon(Icons.cloud_sync, color: Colors.teal),
                 title: const Text('Manual Cloud Sync'),
-                subtitle: const Text('Supabase Cloud ပေါ်သို့ ဒေတာတင်မည်'),
-                onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Syncing... (Next Step)'))),
+                subtitle: const Text('Supabase Cloud ပေါ်သို့ အခုချက်ချင်း ဒေတာတင်မည်'),
+                onTap: _isProcessing ? null : _startCloudSync, // <--- Sync ခလုတ်ကို အသက်သွင်းလိုက်သည်
               ),
               const Divider(),
-
-              // --- Offline Backup ---
               const ListTile(title: Text('Offline Backup', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal))),
-              ListTile(
-                leading: const Icon(Icons.archive, color: Colors.blue),
-                title: const Text('Export Backup (.zip)'),
-                onTap: _isProcessing ? null : _exportBackup,
-              ),
-              ListTile(
-                leading: const Icon(Icons.unarchive, color: Colors.orange),
-                title: const Text('Import Backup (.zip)'),
-                onTap: _isProcessing ? null : _importBackup,
-              ),
+              ListTile(leading: const Icon(Icons.archive, color: Colors.blue), title: const Text('Export Backup (.zip)'), onTap: _isProcessing ? null : _exportBackup),
+              ListTile(leading: const Icon(Icons.unarchive, color: Colors.orange), title: const Text('Import Backup (.zip)'), onTap: _isProcessing ? null : _importBackup),
             ],
           ),
           if (_isProcessing) 
