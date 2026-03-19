@@ -14,7 +14,6 @@ class PropertyMiniCard extends StatelessWidget {
 
   const PropertyMiniCard({super.key, required this.property, this.isSynced = false, required this.onDelete, required this.onEditCompleted});
 
-  // --- ဓာတ်ပုံကို Screen အပြည့်ကြည့်ရန် Function ---
   void _openFullScreenImages(BuildContext context, List<String> photos, int initialIndex) {
     Navigator.push(context, MaterialPageRoute(builder: (context) => Scaffold(
       backgroundColor: Colors.black,
@@ -23,7 +22,7 @@ class PropertyMiniCard extends StatelessWidget {
         controller: PageController(initialPage: initialIndex),
         itemCount: photos.length,
         itemBuilder: (context, index) => InteractiveViewer(
-          minScale: 0.5, maxScale: 4.0, // လက်နှစ်ချောင်းဖြင့် ချဲ့ကြည့်နိုင်ရန်
+          minScale: 0.5, maxScale: 4.0,
           child: Center(child: Image.file(File(photos[index]), fit: BoxFit.contain, errorBuilder: (c, e, s) => const Icon(Icons.broken_image, color: Colors.white, size: 100))),
         ),
       ),
@@ -47,7 +46,6 @@ class PropertyMiniCard extends StatelessWidget {
         return Padding(padding: const EdgeInsets.only(bottom: 24, top: 12, left: 16, right: 16), child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))), const SizedBox(height: 16),
           
-          // --- ဓာတ်ပုံပြသမည့် နေရာ ---
           if (photos.isEmpty)
             Container(height: 180, width: double.infinity, decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(8)), child: const Center(child: Icon(Icons.photo_library, size: 40, color: Colors.grey)))
           else
@@ -92,10 +90,25 @@ class PropertyMiniCard extends StatelessWidget {
     final String formattedPrice = askingPriceLakhs.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
     final relativeTime = TimeHelper.getRelativeTime(property['updated_at']); 
 
+    // Database မှ is_synced အမှန်ကို စစ်ဆေးခြင်း
+    final bool isActuallySynced = property['is_synced'] == 1;
+
     return InkWell(onTap: () => _showExpandedCard(context), borderRadius: BorderRadius.circular(8), child: Card(margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), elevation: 1, child: Padding(padding: const EdgeInsets.all(12.0), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16), maxLines: 1, overflow: TextOverflow.ellipsis)), const SizedBox(width: 8), Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: statusBgColor, borderRadius: BorderRadius.circular(4)), child: Text(status, style: TextStyle(color: statusTextColor, fontSize: 10, fontWeight: FontWeight.bold)))]), const SizedBox(height: 8),
       Text('$formattedPrice သိန်း • $location', style: TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600)), const SizedBox(height: 8),
-      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text('$east | $west | $south | $north', style: const TextStyle(fontSize: 13, color: Colors.grey, letterSpacing: 1.2)), Row(children: [Text(relativeTime, style: const TextStyle(fontSize: 11, color: Colors.grey)), const SizedBox(width: 8), Icon(isSynced ? Icons.cloud_done : Icons.cloud_upload, size: 16, color: isSynced ? Colors.grey.shade400 : Theme.of(context).colorScheme.primary)])])
+      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Text('$east | $west | $south | $north', style: const TextStyle(fontSize: 13, color: Colors.grey, letterSpacing: 1.2)), 
+        Row(children: [
+          Text(relativeTime, style: const TextStyle(fontSize: 11, color: Colors.grey)), 
+          const SizedBox(width: 8), 
+          // Sync တကယ်ဖြစ်သွားမှ အစိမ်းပြမည်၊ မဖြစ်သေးလျှင် အညိုရောင်ပြမည်
+          Icon(
+            isActuallySynced ? Icons.cloud_done : Icons.cloud_upload, 
+            size: 16, 
+            color: isActuallySynced ? Colors.green : Colors.grey.shade400
+          )
+        ])
+      ])
     ]))));
   }
 }
