@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'dart:convert'; 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart'; 
-import 'package:shared_preferences/shared_preferences.dart'; // <---
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'widgets/property_mini_card.dart';
 import 'screens/property_form_screen.dart';
@@ -13,18 +13,17 @@ import 'screens/recycle_bin_screen.dart';
 import 'screens/settings_screen.dart'; 
 import 'db/database_helper.dart';
 import 'utils/time_helper.dart'; 
+import 'services/sync_service.dart'; // <--- Auto Sync အတွက် ချိတ်ဆက်သည်
 
 const String supabaseUrl = String.fromEnvironment('SUPABASE_URL');
 const String supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
 
-// Theme ပြောင်းလဲမှုကို နားထောင်ရန် ValueNotifier
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.system);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
   
-  // သိမ်းထားသော Theme Setting ကို ဖတ်မည်
   final prefs = await SharedPreferences.getInstance();
   final themeStr = prefs.getString('themeMode') ?? 'system';
   if (themeStr == 'light') themeNotifier.value = ThemeMode.light;
@@ -45,7 +44,7 @@ class RealEstateCrmApp extends StatelessWidget {
         return MaterialApp(
           title: 'Real Estate CRM',
           debugShowCheckedModeBanner: false,
-          themeMode: currentMode, // <--- ရွေးချယ်ထားသော Theme အတိုင်းပြမည်
+          themeMode: currentMode, 
           theme: _buildTheme(Brightness.light),
           darkTheme: _buildTheme(Brightness.dark),
           home: const MainDashboard(),
@@ -59,10 +58,7 @@ class RealEstateCrmApp extends StatelessWidget {
     return ThemeData(
       useMaterial3: true,
       brightness: brightness,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: isDark ? const Color(0xFF4DB6AC) : const Color(0xFF008080),
-        brightness: brightness,
-      ),
+      colorScheme: ColorScheme.fromSeed(seedColor: isDark ? const Color(0xFF4DB6AC) : const Color(0xFF008080), brightness: brightness),
       scaffoldBackgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F8F8),
       cardTheme: CardThemeData(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 2),
     );
@@ -103,18 +99,33 @@ class _MainDashboardState extends State<MainDashboard> {
   final TextEditingController _priceFilterController = TextEditingController();
 
   @override
-  void initState() { super.initState(); _loadProperties(); _loadBuyers(); }
+  void initState() { 
+    super.initState(); 
+    _loadProperties(); 
+    _loadBuyers(); 
+    _triggerAutoSync(); // App စဖွင့်ချိန်တွင် နောက်ကွယ်မှ အလိုလို Sync လုပ်မည်
+  }
+
+  // --- Auto Sync ကို နောက်ကွယ်မှ မောင်းနှင်သည့် Function ---
+  Future<void> _triggerAutoSync() async {
+    await SyncService.autoSyncBackground();
+    // Sync လုပ်ပြီးတာနဲ့ UI ကို Refresh လုပ်ပေးမည် (Icon များ အစိမ်းပြောင်းသွားစေရန်)
+    if (mounted) {
+      _loadProperties();
+      _loadBuyers();
+    }
+  }
 
   Future<void> _loadProperties() async {
     setState(() => _isLoading = true);
     final data = await DatabaseHelper.instance.getAllProperties();
-    setState(() { _properties = List<Map<String, dynamic>>.from(data); _isLoading = false; });
+    if (mounted) setState(() { _properties = List<Map<String, dynamic>>.from(data); _isLoading = false; });
   }
 
   Future<void> _loadBuyers() async {
     setState(() => _isLoadingBuyers = true);
     final data = await DatabaseHelper.instance.getAllBuyers();
-    setState(() { _buyers = List<Map<String, dynamic>>.from(data); _isLoadingBuyers = false; });
+    if (mounted) setState(() { _buyers = List<Map<String, dynamic>>.from(data); _isLoadingBuyers = false; });
   }
 
   void _showAutoCloseSnackBar(String message, VoidCallback? onUndo) {
@@ -161,25 +172,48 @@ class _MainDashboardState extends State<MainDashboard> {
               ListTile(
                 leading: const Icon(Icons.people), 
                 title: const Text('Owner List'), 
-                onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (context) => const OwnerListScreen())); }
+                onTap: () async { 
+                  Navigator.pop(context); 
+                  await Navigator.push(context, MaterialPageRoute(builder: (context) => const OwnerListScreen())); 
+                  _triggerAutoSync(); // ပြန်လာလျှင် Sync ဆွဲမည်
+                }
               ),
               ListTile(
                 leading: const Icon(Icons.delete_outline, color: Colors.red), 
                 title: const Text('Recycle Bin'), 
-                onTap: () async { Navigator.pop(context); final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const RecycleBinScreen())); if (result == true) { _loadProperties(); _loadBuyers(); } }
+                onTap: () async { 
+                  Navigator.pop(context); 
+                  await Navigator.push(context, MaterialPageRoute(builder: (context) => const RecycleBinScreen())); 
+                  _loadProperties(); _loadBuyers(); 
+                }
               ),
               const Divider(),
-              // Settings တစ်ခုတည်းသာ ထားရှိတော့ပါသည် (Sync ကို Setting ထဲသို့ ပို့လိုက်ပါပြီ)
               ListTile(
                 leading: const Icon(Icons.settings), 
                 title: const Text('Settings'), 
-                onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())); }
+                onTap: () async { 
+                  Navigator.pop(context); 
+                  await Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())); 
+                  _loadProperties(); _loadBuyers(); 
+                }
               ),
             ],
           ),
         ),
         body: PageView(controller: _pageController, onPageChanged: (index) { setState(() { _currentIndex = index; if (index == 0) { _isSearching = false; _searchQuery = ''; _searchController.clear(); } }); }, children: [ _buildHomeTab(), _buildBuyerTab() ]),
-        floatingActionButton: FloatingActionButton(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Theme.of(context).colorScheme.onPrimary, onPressed: () async { if (_currentIndex == 0) { final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const PropertyFormScreen())); if (result == true) _loadProperties(); } else if (_currentIndex == 1) { final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const BuyerFormScreen())); if (result == true) _loadBuyers(); } }, child: const Icon(Icons.add)),
+        floatingActionButton: FloatingActionButton(
+          backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Theme.of(context).colorScheme.onPrimary, 
+          onPressed: () async { 
+            if (_currentIndex == 0) { 
+              final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const PropertyFormScreen())); 
+              if (result == true) { _loadProperties(); _triggerAutoSync(); } // ဒေတာအသစ်သွင်းပြီးလျှင် Auto Sync ခေါ်မည်
+            } else if (_currentIndex == 1) { 
+              final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const BuyerFormScreen())); 
+              if (result == true) { _loadBuyers(); _triggerAutoSync(); } 
+            } 
+          }, 
+          child: const Icon(Icons.add)
+        ),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _currentIndex == 2 ? 0 : _currentIndex, 
           onDestinationSelected: (index) { if (index == 2) { _scaffoldKey.currentState?.openEndDrawer(); } else { _pageController.animateToPage(index, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut); } },
@@ -218,11 +252,17 @@ class _MainDashboardState extends State<MainDashboard> {
         Expanded(flex: 5, child: _selectedFilterCategory == 'asking_price_lakhs' ? TextField(controller: _priceFilterController, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText: 'အများဆုံး (သိန်း)', border: InputBorder.none, isDense: true), onChanged: (_) => setState(() {})) : DropdownButtonHideUnderline(child: DropdownButton<String>(isExpanded: true, hint: const Text('ရွေးချယ်ရန်'), value: _selectedFilterValue, items: _currentSubFilterValues.map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis))).toList(), onChanged: (val) => setState(() => _selectedFilterValue = val)))),
         if (_selectedFilterCategory != null) IconButton(icon: const Icon(Icons.cancel, color: Colors.grey, size: 20), onPressed: () => setState(() { _selectedFilterCategory = null; _selectedFilterValue = null; _currentSubFilterValues = []; _priceFilterController.clear(); }))
       ])),
-      Expanded(child: filteredProperties.isEmpty ? const Center(child: Text('စာရင်းမရှိပါ')) : ListView.builder(padding: const EdgeInsets.only(top: 8, bottom: 80), itemCount: filteredProperties.length, itemBuilder: (context, index) => PropertyMiniCard(property: filteredProperties[index], isSynced: false, onDelete: () {
-        setState(() => _properties.removeWhere((p) => p['id'] == filteredProperties[index]['id']));
-        DatabaseHelper.instance.moveToRecycleBin('crm_properties', filteredProperties[index]['id']);
-        _showAutoCloseSnackBar('ဖျက်ပြီးပါပြီ', () async { await DatabaseHelper.instance.restoreFromRecycleBin('crm_properties', filteredProperties[index]['id']); _loadProperties(); });
-      }, onEditCompleted: () => _loadProperties())))
+      Expanded(child: filteredProperties.isEmpty ? const Center(child: Text('စာရင်းမရှိပါ')) : ListView.builder(padding: const EdgeInsets.only(top: 8, bottom: 80), itemCount: filteredProperties.length, itemBuilder: (context, index) => PropertyMiniCard(
+        property: filteredProperties[index], 
+        isSynced: filteredProperties[index]['is_synced'] == 1, // Database မှ is_synced ကို အသုံးပြုသည်
+        onDelete: () async {
+          final id = filteredProperties[index]['id'];
+          setState(() => _properties.removeWhere((p) => p['id'] == id));
+          await DatabaseHelper.instance.moveToRecycleBin('crm_properties', id);
+          _showAutoCloseSnackBar('ဖျက်ပြီးပါပြီ', () async { await DatabaseHelper.instance.restoreFromRecycleBin('crm_properties', id); _loadProperties(); });
+        }, 
+        onEditCompleted: () { _loadProperties(); _triggerAutoSync(); } // ပြင်ပြီးလျှင် Auto Sync ခေါ်မည်
+      )))
     ]);
   }
 
@@ -246,7 +286,7 @@ class _MainDashboardState extends State<MainDashboard> {
         })]),
         Text('${buyer['budget_lakhs']} သိန်း • ${buyer['preferred_location']}', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
         if (phones.isNotEmpty) InkWell(onTap: () => launchUrl(Uri.parse('tel:${phones.first}')), child: Text(phones.join(', '), style: const TextStyle(color: Colors.blue, decoration: TextDecoration.underline))),
-        Align(alignment: Alignment.centerRight, child: OutlinedButton(onPressed: () async { final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => BuyerFormScreen(editData: buyer))); if (result == true) _loadBuyers(); }, child: const Text('Edit')))
+        Align(alignment: Alignment.centerRight, child: OutlinedButton(onPressed: () async { final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => BuyerFormScreen(editData: buyer))); if (result == true) { _loadBuyers(); _triggerAutoSync(); } }, child: const Text('Edit')))
       ])));
     });
   }
