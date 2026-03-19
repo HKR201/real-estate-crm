@@ -13,7 +13,7 @@ import 'screens/recycle_bin_screen.dart';
 import 'screens/settings_screen.dart'; 
 import 'db/database_helper.dart';
 import 'utils/time_helper.dart'; 
-import 'services/sync_service.dart'; // <--- Auto Sync အတွက် ချိတ်ဆက်သည်
+import 'services/sync_service.dart'; 
 
 const String supabaseUrl = String.fromEnvironment('SUPABASE_URL');
 const String supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
@@ -30,7 +30,8 @@ void main() async {
   else if (themeStr == 'dark') themeNotifier.value = ThemeMode.dark;
   else themeNotifier.value = ThemeMode.system;
 
-  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  // ⚠️ Keyboard Bug ဖြစ်စေသော SystemChrome.setEnabledSystemUIMode ကို ဤနေရာမှ ဖြုတ်ပစ်လိုက်ပါပြီ
+
   runApp(const RealEstateCrmApp());
 }
 
@@ -103,17 +104,12 @@ class _MainDashboardState extends State<MainDashboard> {
     super.initState(); 
     _loadProperties(); 
     _loadBuyers(); 
-    _triggerAutoSync(); // App စဖွင့်ချိန်တွင် နောက်ကွယ်မှ အလိုလို Sync လုပ်မည်
+    _triggerAutoSync(); 
   }
 
-  // --- Auto Sync ကို နောက်ကွယ်မှ မောင်းနှင်သည့် Function ---
   Future<void> _triggerAutoSync() async {
     await SyncService.autoSyncBackground();
-    // Sync လုပ်ပြီးတာနဲ့ UI ကို Refresh လုပ်ပေးမည် (Icon များ အစိမ်းပြောင်းသွားစေရန်)
-    if (mounted) {
-      _loadProperties();
-      _loadBuyers();
-    }
+    if (mounted) { _loadProperties(); _loadBuyers(); }
   }
 
   Future<void> _loadProperties() async {
@@ -175,7 +171,7 @@ class _MainDashboardState extends State<MainDashboard> {
                 onTap: () async { 
                   Navigator.pop(context); 
                   await Navigator.push(context, MaterialPageRoute(builder: (context) => const OwnerListScreen())); 
-                  _triggerAutoSync(); // ပြန်လာလျှင် Sync ဆွဲမည်
+                  _triggerAutoSync(); 
                 }
               ),
               ListTile(
@@ -206,7 +202,7 @@ class _MainDashboardState extends State<MainDashboard> {
           onPressed: () async { 
             if (_currentIndex == 0) { 
               final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const PropertyFormScreen())); 
-              if (result == true) { _loadProperties(); _triggerAutoSync(); } // ဒေတာအသစ်သွင်းပြီးလျှင် Auto Sync ခေါ်မည်
+              if (result == true) { _loadProperties(); _triggerAutoSync(); } 
             } else if (_currentIndex == 1) { 
               final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const BuyerFormScreen())); 
               if (result == true) { _loadBuyers(); _triggerAutoSync(); } 
@@ -239,13 +235,15 @@ class _MainDashboardState extends State<MainDashboard> {
     }
     return Column(children: [
       Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), color: Theme.of(context).cardColor, child: Row(children: [
-        Expanded(flex: 5, child: DropdownButtonHideUnderline(child: DropdownButton<String>(isExpanded: true, hint: const Text('Filter By', style: TextStyle(fontWeight: FontWeight.bold)), value: _selectedFilterCategory, icon: const Icon(Icons.filter_list, size: 20), items: _filterCategories.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value, style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis))).toList(), onChanged: (v) async {
+        Expanded(flex: 5, child: DropdownButtonHideUnderline(child: DropdownButton<String>(isExpanded: true, hint: const Text('Filter By', style: TextStyle(fontWeight: FontWeight.bold)), value: _selectedFilterCategory, icon: const Icon(Icons.filter_list, size: 20), items: _filterCategories.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value, style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis))).toList(), 
+        // ⚠️ Dashboard Filter တွင် အမှန်တကယ် သုံးထားသော စာရင်းကိုသာ ခေါ်မည်
+        onChanged: (v) async {
           setState(() { _selectedFilterCategory = v; _selectedFilterValue = null; _currentSubFilterValues = []; _priceFilterController.clear(); });
           if (v == 'status') _currentSubFilterValues = ['Available', 'Pending', 'Sold Out'];
-          else if (v == 'location_id') _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('location');
-          else if (v == 'road_type') _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('road_type');
-          else if (v == 'house_type') _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('house_type');
-          else if (v == 'land_type') _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('land_type');
+          else if (v == 'location_id') _currentSubFilterValues = await DatabaseHelper.instance.getDistinctPropertyValues('location_id');
+          else if (v == 'road_type') _currentSubFilterValues = await DatabaseHelper.instance.getDistinctPropertyValues('road_type');
+          else if (v == 'house_type') _currentSubFilterValues = await DatabaseHelper.instance.getDistinctPropertyValues('house_type');
+          else if (v == 'land_type') _currentSubFilterValues = await DatabaseHelper.instance.getDistinctPropertyValues('land_type');
           setState(() {});
         }))),
         const SizedBox(width: 8), Container(width: 1, height: 24, color: Colors.grey.shade300), const SizedBox(width: 8),
@@ -254,14 +252,14 @@ class _MainDashboardState extends State<MainDashboard> {
       ])),
       Expanded(child: filteredProperties.isEmpty ? const Center(child: Text('စာရင်းမရှိပါ')) : ListView.builder(padding: const EdgeInsets.only(top: 8, bottom: 80), itemCount: filteredProperties.length, itemBuilder: (context, index) => PropertyMiniCard(
         property: filteredProperties[index], 
-        isSynced: filteredProperties[index]['is_synced'] == 1, // Database မှ is_synced ကို အသုံးပြုသည်
+        isSynced: filteredProperties[index]['is_synced'] == 1, 
         onDelete: () async {
           final id = filteredProperties[index]['id'];
           setState(() => _properties.removeWhere((p) => p['id'] == id));
           await DatabaseHelper.instance.moveToRecycleBin('crm_properties', id);
           _showAutoCloseSnackBar('ဖျက်ပြီးပါပြီ', () async { await DatabaseHelper.instance.restoreFromRecycleBin('crm_properties', id); _loadProperties(); });
         }, 
-        onEditCompleted: () { _loadProperties(); _triggerAutoSync(); } // ပြင်ပြီးလျှင် Auto Sync ခေါ်မည်
+        onEditCompleted: () { _loadProperties(); _triggerAutoSync(); } 
       )))
     ]);
   }
