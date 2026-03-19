@@ -33,8 +33,8 @@ jobs:
         run: flutter pub get
 
       - name: 🛠️ အဆင့် (၆) - APK ဖိုင် တည်ဆောက်ခြင်း
-        run: flutter build apk --release
-
+        run: flutter build apk --release --dart-define=SUPABASE_URL="${{ secrets.SUPABASE_URL }}" --dart-define=SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}"
+        
       - name: 📤 အဆင့် (၇) - ထွက်လာသော APK ကို သိမ်းဆည်းပေးခြင်း
         uses: actions/upload-artifact@v4
         with:
