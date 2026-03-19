@@ -1,6 +1,5 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
-import 'package:uuid/uuid.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -10,54 +9,156 @@ class DatabaseHelper {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('crm_local.db');
+    _database = await _initDB('crm_database.db');
     return _database!;
   }
 
   Future<Database> _initDB(String filePath) async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
-    return await openDatabase(path, version: 1, onCreate: _createDB);
+
+    // Version ကို 2 သို့ ပြောင်းထားပါသည် (is_synced ထည့်ရန်)
+    return await openDatabase(
+      path, 
+      version: 2, 
+      onCreate: _createDB,
+      onUpgrade: _onUpgrade,
+    );
+  }
+
+  Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('ALTER TABLE crm_owners ADD COLUMN is_synced INTEGER DEFAULT 0');
+      await db.execute('ALTER TABLE crm_properties ADD COLUMN is_synced INTEGER DEFAULT 0');
+      await db.execute('ALTER TABLE crm_buyers ADD COLUMN is_synced INTEGER DEFAULT 0');
+    }
   }
 
   Future _createDB(Database db, int version) async {
-    await db.execute('''CREATE TABLE crm_properties (id TEXT PRIMARY KEY, title TEXT NOT NULL, asking_price_lakhs INTEGER NOT NULL, bottom_price_lakhs INTEGER, status TEXT DEFAULT 'Available', east_ft INTEGER, west_ft INTEGER, south_ft INTEGER, north_ft INTEGER, house_type TEXT, road_type TEXT, land_type TEXT, location_id TEXT, remark TEXT, owner_id TEXT, map_link TEXT, is_deleted INTEGER DEFAULT 0, extra_data TEXT DEFAULT '{}', created_at TEXT, updated_at TEXT)''');
-    await db.execute('''CREATE TABLE crm_owners (id TEXT PRIMARY KEY, name TEXT NOT NULL, phones TEXT DEFAULT '[]', remark TEXT, is_deleted INTEGER DEFAULT 0, extra_data TEXT DEFAULT '{}', created_at TEXT, updated_at TEXT)''');
-    await db.execute('''CREATE TABLE crm_buyers (id TEXT PRIMARY KEY, name TEXT NOT NULL, phones TEXT DEFAULT '[]', budget_lakhs INTEGER, preferred_location TEXT, is_deleted INTEGER DEFAULT 0, extra_data TEXT DEFAULT '{}', created_at TEXT, updated_at TEXT)''');
-    await db.execute('''CREATE TABLE crm_metadata (id TEXT PRIMARY KEY, category TEXT NOT NULL, value TEXT NOT NULL, created_at TEXT)''');
-    await db.execute('''CREATE TABLE crm_sync_logs (id TEXT PRIMARY KEY, last_sync_time TEXT NOT NULL, status TEXT, details TEXT)''');
+    const textType = 'TEXT';
+    const intType = 'INTEGER';
+
+    await db.execute('''
+      CREATE TABLE crm_owners (
+        id $textType PRIMARY KEY,
+        name $textType NOT NULL,
+        phones $textType,
+        remark $textType,
+        is_deleted $intType DEFAULT 0,
+        extra_data $textType,
+        is_synced $intType DEFAULT 0,
+        created_at $textType,
+        updated_at $textType
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE crm_properties (
+        id $textType PRIMARY KEY,
+        title $textType NOT NULL,
+        asking_price_lakhs $intType NOT NULL,
+        bottom_price_lakhs $intType,
+        status $textType DEFAULT 'Available',
+        east_ft $intType, west_ft $intType, south_ft $intType, north_ft $intType,
+        house_type $textType, road_type $textType, land_type $textType,
+        location_id $textType, remark $textType, owner_id $textType, map_link $textType,
+        is_deleted $intType DEFAULT 0,
+        extra_data $textType,
+        is_synced $intType DEFAULT 0,
+        created_at $textType,
+        updated_at $textType
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE crm_buyers (
+        id $textType PRIMARY KEY,
+        name $textType NOT NULL,
+        phones $textType,
+        budget_lakhs $intType,
+        preferred_location $textType,
+        is_deleted $intType DEFAULT 0,
+        extra_data $textType,
+        is_synced $intType DEFAULT 0,
+        created_at $textType,
+        updated_at $textType
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE crm_metadata (
+        id $textType PRIMARY KEY,
+        category $textType NOT NULL,
+        value $textType NOT NULL,
+        created_at $textType
+      )
+    ''');
+
+    _insertInitialMetadata(db);
   }
 
-  // Insert, Get & Update (Active Records)
-  Future<int> insertProperty(Map<String, dynamic> row) async { Database db = await instance.database; return await db.insert('crm_properties', row); }
-  Future<List<Map<String, dynamic>>> getAllProperties() async { Database db = await instance.database; return await db.query('crm_properties', where: 'is_deleted = ?', whereArgs: [0], orderBy: 'created_at DESC'); }
-  Future<int> updateProperty(Map<String, dynamic> row) async { Database db = await instance.database; return await db.update('crm_properties', row, where: 'id = ?', whereArgs: [row['id']]); }
+  Future<void> _insertInitialMetadata(Database db) async {
+    final batch = db.batch();
+    List<String> locations = ['ပုသိမ်', 'ရန်ကုန်', 'မန္တလေး', 'နေပြည်တော်'];
+    for (int i = 0; i < locations.length; i++) {
+      batch.insert('crm_metadata', {'id': 'loc_$i', 'category': 'location', 'value': locations[i], 'created_at': DateTime.now().toIso8601String()});
+    }
+    List<String> roadTypes = ['ကွန်ကရစ်လမ်း', 'ကတ္တရာလမ်း', 'မြေသားလမ်း'];
+    for (int i = 0; i < roadTypes.length; i++) {
+      batch.insert('crm_metadata', {'id': 'road_$i', 'category': 'road_type', 'value': roadTypes[i], 'created_at': DateTime.now().toIso8601String()});
+    }
+    List<String> houseTypes = ['ပျဉ်ထောင်အိမ်', 'တိုက်အိမ်', 'RC', 'Steel Structure'];
+    for (int i = 0; i < houseTypes.length; i++) {
+      batch.insert('crm_metadata', {'id': 'house_$i', 'category': 'house_type', 'value': houseTypes[i], 'created_at': DateTime.now().toIso8601String()});
+    }
+    List<String> landTypes = ['ဂရန်မြေ', 'ဘိုးဘွားပိုင်မြေ', 'ပါမစ်မြေ', 'စလစ်မြေ', 'လယ်ယာမြေ'];
+    for (int i = 0; i < landTypes.length; i++) {
+      batch.insert('crm_metadata', {'id': 'land_$i', 'category': 'land_type', 'value': landTypes[i], 'created_at': DateTime.now().toIso8601String()});
+    }
+    await batch.commit(noResult: true);
+  }
 
-  Future<int> insertOwner(Map<String, dynamic> row) async { Database db = await instance.database; return await db.insert('crm_owners', row); }
-  Future<List<Map<String, dynamic>>> getAllOwners() async { Database db = await instance.database; return await db.query('crm_owners', where: 'is_deleted = ?', whereArgs: [0], orderBy: 'created_at DESC'); }
-  Future<int> updateOwner(Map<String, dynamic> row) async { Database db = await instance.database; return await db.update('crm_owners', row, where: 'id = ?', whereArgs: [row['id']]); }
+  // Common CRUD
+  Future<List<Map<String, dynamic>>> getAllProperties() async {
+    final db = await instance.database;
+    return await db.query('crm_properties', where: 'is_deleted = ?', whereArgs: [0], orderBy: 'updated_at DESC');
+  }
 
-  Future<int> insertBuyer(Map<String, dynamic> row) async { Database db = await instance.database; return await db.insert('crm_buyers', row); }
-  Future<List<Map<String, dynamic>>> getAllBuyers() async { Database db = await instance.database; return await db.query('crm_buyers', where: 'is_deleted = ?', whereArgs: [0], orderBy: 'created_at DESC'); }
-  Future<int> updateBuyer(Map<String, dynamic> row) async { Database db = await instance.database; return await db.update('crm_buyers', row, where: 'id = ?', whereArgs: [row['id']]); }
+  Future<List<Map<String, dynamic>>> getAllOwners() async {
+    final db = await instance.database;
+    return await db.query('crm_owners', where: 'is_deleted = ?', whereArgs: [0], orderBy: 'updated_at DESC');
+  }
 
-  // Metadata
-  Future<List<String>> getMetadata(String category) async { Database db = await instance.database; final result = await db.query('crm_metadata', where: 'category = ?', whereArgs: [category], orderBy: 'value ASC'); return result.map((e) => e['value'] as String).toList(); }
-  Future<void> insertMetadata(String category, String value) async { Database db = await instance.database; final existing = await db.query('crm_metadata', where: 'category = ? AND value = ?', whereArgs: [category, value]); if (existing.isEmpty) { await db.insert('crm_metadata', {'id': const Uuid().v4(), 'category': category, 'value': value, 'created_at': DateTime.now().toIso8601String()}); } }
+  Future<List<Map<String, dynamic>>> getAllBuyers() async {
+    final db = await instance.database;
+    return await db.query('crm_buyers', where: 'is_deleted = ?', whereArgs: [0], orderBy: 'updated_at DESC');
+  }
 
-  // ========================================================
-  // --- အမှိုက်ပုံး (Recycle Bin) အတွက် လုပ်ဆောင်ချက်များ ---
-  // ========================================================
-  Future<void> moveToRecycleBin(String tableName, String id) async { Database db = await instance.database; await db.update(tableName, {'is_deleted': 1, 'updated_at': DateTime.now().toIso8601String()}, where: 'id = ?', whereArgs: [id]); }
-  Future<void> restoreFromRecycleBin(String tableName, String id) async { Database db = await instance.database; await db.update(tableName, {'is_deleted': 0, 'updated_at': DateTime.now().toIso8601String()}, where: 'id = ?', whereArgs: [id]); }
+  Future<int> insertProperty(Map<String, dynamic> data) async {
+    final db = await instance.database;
+    data['is_synced'] = 0; // အသစ်ထည့်လျှင် Cloud မရောက်သေးဟု သတ်မှတ်သည်
+    return await db.insert('crm_properties', data, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
 
-  // ဖျက်ထားသော ဒေတာများကို ဆွဲထုတ်ရန် (is_deleted = 1)
-  Future<List<Map<String, dynamic>>> getDeletedProperties() async { Database db = await instance.database; return await db.query('crm_properties', where: 'is_deleted = ?', whereArgs: [1], orderBy: 'updated_at DESC'); }
-  Future<List<Map<String, dynamic>>> getDeletedOwners() async { Database db = await instance.database; return await db.query('crm_owners', where: 'is_deleted = ?', whereArgs: [1], orderBy: 'updated_at DESC'); }
-  Future<List<Map<String, dynamic>>> getDeletedBuyers() async { Database db = await instance.database; return await db.query('crm_buyers', where: 'is_deleted = ?', whereArgs: [1], orderBy: 'updated_at DESC'); }
+  Future<int> updateProperty(Map<String, dynamic> data) async {
+    final db = await instance.database;
+    data['is_synced'] = 0; // ပြင်ဆင်လျှင် Cloud ပြန်တင်ရမည်ဟု သတ်မှတ်သည်
+    return await db.update('crm_properties', data, where: 'id = ?', whereArgs: [data['id']]);
+  }
 
-  // အပြီးတိုင် ဖျက်ပစ်ရန်
-  Future<void> permanentlyDelete(String tableName, String id) async { Database db = await instance.database; await db.delete(tableName, where: 'id = ?', whereArgs: [id]); }
+  Future<int> moveToRecycleBin(String table, String id) async {
+    final db = await instance.database;
+    return await db.update(table, {'is_deleted': 1, 'is_synced': 0}, where: 'id = ?', whereArgs: [id]);
+  }
 
-  Future close() async { final db = await instance.database; db.close(); }
+  Future<int> restoreFromRecycleBin(String table, String id) async {
+    final db = await instance.database;
+    return await db.update(table, {'is_deleted': 0, 'is_synced': 0}, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<String>> getMetadata(String category) async {
+    final db = await instance.database;
+    final result = await db.query('crm_metadata', columns: ['value'], where: 'category = ?', whereArgs: [category]);
+    return result.map((e) => e['value'] as String).toList();
+  }
 }
