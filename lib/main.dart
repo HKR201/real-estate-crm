@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/services.dart'; 
 import 'dart:convert'; 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart'; 
@@ -30,7 +30,9 @@ void main() async {
   else if (themeStr == 'dark') themeNotifier.value = ThemeMode.dark;
   else themeNotifier.value = ThemeMode.system;
 
-  // ⚠️ Keyboard Bug ဖြစ်စေသော SystemChrome.setEnabledSystemUIMode ကို ဤနေရာမှ ဖြုတ်ပစ်လိုက်ပါပြီ
+  // ⚠️ Android တွင် App Switch လုပ်လျှင် Keyboard ပျောက်သော ပြဿနာကို ဖြေရှင်းရန် 
+  // Standard UI Mode အဖြစ် အသေသတ်မှတ်ပေးလိုက်ပါသည်
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
 
   runApp(const RealEstateCrmApp());
 }
@@ -235,17 +237,29 @@ class _MainDashboardState extends State<MainDashboard> {
     }
     return Column(children: [
       Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), color: Theme.of(context).cardColor, child: Row(children: [
-        Expanded(flex: 5, child: DropdownButtonHideUnderline(child: DropdownButton<String>(isExpanded: true, hint: const Text('Filter By', style: TextStyle(fontWeight: FontWeight.bold)), value: _selectedFilterCategory, icon: const Icon(Icons.filter_list, size: 20), items: _filterCategories.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value, style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis))).toList(), 
-        // ⚠️ Dashboard Filter တွင် အမှန်တကယ် သုံးထားသော စာရင်းကိုသာ ခေါ်မည်
-        onChanged: (v) async {
-          setState(() { _selectedFilterCategory = v; _selectedFilterValue = null; _currentSubFilterValues = []; _priceFilterController.clear(); });
-          if (v == 'status') _currentSubFilterValues = ['Available', 'Pending', 'Sold Out'];
-          else if (v == 'location_id') _currentSubFilterValues = await DatabaseHelper.instance.getDistinctPropertyValues('location_id');
-          else if (v == 'road_type') _currentSubFilterValues = await DatabaseHelper.instance.getDistinctPropertyValues('road_type');
-          else if (v == 'house_type') _currentSubFilterValues = await DatabaseHelper.instance.getDistinctPropertyValues('house_type');
-          else if (v == 'land_type') _currentSubFilterValues = await DatabaseHelper.instance.getDistinctPropertyValues('land_type');
-          setState(() {});
-        }))),
+        Expanded(flex: 5, child: DropdownButtonHideUnderline(child: DropdownButton<String>(
+          isExpanded: true, 
+          hint: const Text('Filter By', style: TextStyle(fontWeight: FontWeight.bold)), 
+          value: _selectedFilterCategory, 
+          icon: const Icon(Icons.filter_list, size: 20), 
+          items: _filterCategories.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value, style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis))).toList(), 
+          // ⚠️ Dashboard Filter တွင် အမှန်တကယ် သုံးထားသော စာရင်းကိုသာ ခေါ်မည်
+          onChanged: (v) async {
+            setState(() { _selectedFilterCategory = v; _selectedFilterValue = null; _currentSubFilterValues = []; _priceFilterController.clear(); });
+            if (v == 'status') {
+              _currentSubFilterValues = ['Available', 'Pending', 'Sold Out'];
+            } else if (v == 'location_id') {
+              _currentSubFilterValues = await DatabaseHelper.instance.getDistinctPropertyValues('location_id');
+            } else if (v == 'road_type') {
+              _currentSubFilterValues = await DatabaseHelper.instance.getDistinctPropertyValues('road_type');
+            } else if (v == 'house_type') {
+              _currentSubFilterValues = await DatabaseHelper.instance.getDistinctPropertyValues('house_type');
+            } else if (v == 'land_type') {
+              _currentSubFilterValues = await DatabaseHelper.instance.getDistinctPropertyValues('land_type');
+            }
+            setState(() {});
+          }
+        ))),
         const SizedBox(width: 8), Container(width: 1, height: 24, color: Colors.grey.shade300), const SizedBox(width: 8),
         Expanded(flex: 5, child: _selectedFilterCategory == 'asking_price_lakhs' ? TextField(controller: _priceFilterController, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText: 'အများဆုံး (သိန်း)', border: InputBorder.none, isDense: true), onChanged: (_) => setState(() {})) : DropdownButtonHideUnderline(child: DropdownButton<String>(isExpanded: true, hint: const Text('ရွေးချယ်ရန်'), value: _selectedFilterValue, items: _currentSubFilterValues.map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis))).toList(), onChanged: (val) => setState(() => _selectedFilterValue = val)))),
         if (_selectedFilterCategory != null) IconButton(icon: const Icon(Icons.cancel, color: Colors.grey, size: 20), onPressed: () => setState(() { _selectedFilterCategory = null; _selectedFilterValue = null; _currentSubFilterValues = []; _priceFilterController.clear(); }))
