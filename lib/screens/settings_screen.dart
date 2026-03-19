@@ -10,7 +10,7 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../db/database_helper.dart';
 import '../main.dart';
-import '../services/sync_service.dart'; // <--- Sync Service ကို ချိတ်ဆက်သည်
+import '../services/sync_service.dart'; 
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -40,31 +40,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
     else themeNotifier.value = ThemeMode.system;
   }
 
-  // --- Cloud Sync လုပ်ဆောင်မည့် Function ---
+  // --- Cloud သို့ တင်ခြင်း (Upload) ---
   Future<void> _startCloudSync() async {
-    setState(() { _isProcessing = true; _statusMessage = "Cloud နှင့် ချိတ်ဆက်နေပါသည်..."; });
+    setState(() { _isProcessing = true; _statusMessage = "Cloud သို့ ဒေတာများ ပို့ဆောင်နေပါသည်..."; });
     try {
-      await SyncService.syncAllData((msg) {
-        setState(() => _statusMessage = msg);
-      });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cloud Sync အောင်မြင်ပါသည်'), backgroundColor: Colors.green));
+      await SyncService.syncAllData((msg) { setState(() => _statusMessage = msg); });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cloud ပေါ်သို့ အောင်မြင်စွာ တင်ပြီးပါပြီ'), backgroundColor: Colors.green));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Sync Error: $e'), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload Error: $e'), backgroundColor: Colors.red));
     } finally {
       setState(() { _isProcessing = false; _statusMessage = ""; });
     }
   }
 
-  // (Export/Import Backup logic များသည် ယခင်အတိုင်းဖြစ်ပါသည်...)
+  // --- Cloud မှ ဆွဲချခြင်း (Download) ---
+  Future<void> _startCloudDownload() async {
+    setState(() { _isProcessing = true; _statusMessage = "Cloud မှ ဒေတာများ ရယူနေပါသည်..."; });
+    try {
+      await SyncService.downloadAllData((msg) { setState(() => _statusMessage = msg); });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cloud မှ အောင်မြင်စွာ ရယူပြီးပါပြီ'), backgroundColor: Colors.green));
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Download Error: $e'), backgroundColor: Colors.red));
+    } finally {
+      setState(() { _isProcessing = false; _statusMessage = ""; });
+    }
+  }
+
+  // --- Offline Backup (ယခင်အတိုင်း) ---
   Future<void> _exportBackup() async {
     setState(() { _isProcessing = true; _statusMessage = "Backup ထုပ်ပိုးနေပါသည်..."; });
     try {
       final db = await DatabaseHelper.instance.database;
-      final properties = await db.query('crm_properties');
-      final owners = await db.query('crm_owners');
-      final buyers = await db.query('crm_buyers');
-      final metadata = await db.query('crm_metadata');
-      Map<String, dynamic> jsonData = { 'properties': properties, 'owners': owners, 'buyers': buyers, 'metadata': metadata };
+      Map<String, dynamic> jsonData = { 'properties': await db.query('crm_properties'), 'owners': await db.query('crm_owners'), 'buyers': await db.query('crm_buyers'), 'metadata': await db.query('crm_metadata') };
       final appDir = await getApplicationDocumentsDirectory();
       final photosDir = Directory(p.join(appDir.path, 'property_photos'));
       var encoder = ZipFileEncoder();
@@ -126,16 +133,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
               RadioListTile<String>(title: const Text('Dark Mode'), value: 'dark', groupValue: _currentTheme, onChanged: (v) => _updateTheme(v!)),
               const Divider(),
               const ListTile(title: Text('Data Synchronization', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal))),
+              
+              // --- Upload / Download ခလုတ်များ ---
               ListTile(
-                leading: const Icon(Icons.cloud_sync, color: Colors.teal),
-                title: const Text('Manual Cloud Sync'),
-                subtitle: const Text('Supabase Cloud ပေါ်သို့ အခုချက်ချင်း ဒေတာတင်မည်'),
-                onTap: _isProcessing ? null : _startCloudSync, // <--- Sync ခလုတ်ကို အသက်သွင်းလိုက်သည်
+                leading: const Icon(Icons.cloud_upload, color: Colors.teal),
+                title: const Text('Upload to Cloud'),
+                subtitle: const Text('ဖုန်းထဲမှ ဒေတာများကို Cloud ပေါ်သို့ တင်မည်'),
+                onTap: _isProcessing ? null : _startCloudSync, 
               ),
+              ListTile(
+                leading: const Icon(Icons.cloud_download, color: Colors.blue),
+                title: const Text('Download from Cloud (Restore)'),
+                subtitle: const Text('Cloud ပေါ်မှ ဒေတာနှင့် ဓာတ်ပုံများကို ဖုန်းထဲသို့ ပြန်ယူမည်'),
+                onTap: _isProcessing ? null : _startCloudDownload, 
+              ),
+
               const Divider(),
               const ListTile(title: Text('Offline Backup', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal))),
-              ListTile(leading: const Icon(Icons.archive, color: Colors.blue), title: const Text('Export Backup (.zip)'), onTap: _isProcessing ? null : _exportBackup),
-              ListTile(leading: const Icon(Icons.unarchive, color: Colors.orange), title: const Text('Import Backup (.zip)'), onTap: _isProcessing ? null : _importBackup),
+              ListTile(leading: const Icon(Icons.archive, color: Colors.grey), title: const Text('Export Backup (.zip)'), onTap: _isProcessing ? null : _exportBackup),
+              ListTile(leading: const Icon(Icons.unarchive, color: Colors.grey), title: const Text('Import Backup (.zip)'), onTap: _isProcessing ? null : _importBackup),
             ],
           ),
           if (_isProcessing) 
