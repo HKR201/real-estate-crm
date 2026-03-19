@@ -71,7 +71,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
           if (extra['property_type'] != null) _propertyType = extra['property_type'];
           if (extra['photos'] != null) _photoPaths = List<String>.from(extra['photos']);
         } catch (e) {
-          debugPrint(e.toString());
+          debugPrint("JSON Parse Error: ${e.toString()}");
         }
       }
     }
@@ -114,7 +114,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
         });
       }
     } catch (e) {
-      debugPrint(e.toString());
+      debugPrint("Load Owner Error: ${e.toString()}");
     }
   }
 
@@ -139,7 +139,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
         }
       }
     } catch (e) {
-      debugPrint(e.toString());
+      debugPrint("Image Pick Error: ${e.toString()}");
     }
   }
 
@@ -149,7 +149,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
     try {
       await launchUrl(Uri.parse(urlStr), mode: LaunchMode.externalApplication);
     } catch (e) {
-      debugPrint(e.toString());
+      debugPrint("Launch Map Error: ${e.toString()}");
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('မြေပုံ ဖွင့်၍ မရပါ')));
     }
   }
@@ -194,7 +194,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
       }
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
-      debugPrint(e.toString());
+      debugPrint("Save Property Error: ${e.toString()}");
       setState(() => _isSaving = false);
     }
   }
@@ -414,9 +414,9 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
                 ),
               ),
               
-              // ⚠️ ဤနေရာမှစ၍ ကွင်းအဖွင့်အပိတ် (Brackets) များကို သေချာခွဲထုတ်ရေးသားထားပါသည်
-              if (_photoPaths.isNotEmpty) ...[
-                const SizedBox(height: 16),
+              // ဓာတ်ပုံစာရင်းပြသသည့်အပိုင်း (Error ကင်းစင်အောင် ရေးသားထားသည်)
+              if (_photoPaths.isNotEmpty) const SizedBox(height: 16),
+              if (_photoPaths.isNotEmpty)
                 SizedBox(
                   height: 100,
                   child: ListView.builder(
@@ -438,8 +438,4 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
                                 File(_photoPaths[index]),
                                 fit: BoxFit.cover,
                                 cacheWidth: 300,
-                              ),
-                            ),
-                          ),
-                          Positioned(
-          
+                
