@@ -3,24 +3,35 @@ import 'package:flutter/services.dart';
 import 'dart:convert'; 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart'; 
+import 'package:shared_preferences/shared_preferences.dart'; // <---
 
 import 'widgets/property_mini_card.dart';
 import 'screens/property_form_screen.dart';
 import 'screens/owner_list_screen.dart';
 import 'screens/buyer_form_screen.dart'; 
 import 'screens/recycle_bin_screen.dart'; 
-import 'screens/settings_screen.dart'; // <--- Settings စာမျက်နှာကို ချိတ်ဆက်သည်
+import 'screens/settings_screen.dart'; 
 import 'db/database_helper.dart';
 import 'utils/time_helper.dart'; 
 
 const String supabaseUrl = 'YOUR_SUPABASE_URL';
 const String supabaseAnonKey = 'YOUR_SUPABASE_ANON_KEY';
 
+// Theme ပြောင်းလဲမှုကို နားထောင်ရန် ValueNotifier
+final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.system);
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
+  
+  // သိမ်းထားသော Theme Setting ကို ဖတ်မည်
+  final prefs = await SharedPreferences.getInstance();
+  final themeStr = prefs.getString('themeMode') ?? 'system';
+  if (themeStr == 'light') themeNotifier.value = ThemeMode.light;
+  else if (themeStr == 'dark') themeNotifier.value = ThemeMode.dark;
+  else themeNotifier.value = ThemeMode.system;
+
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(systemNavigationBarColor: Colors.transparent, statusBarColor: Colors.transparent));
   runApp(const RealEstateCrmApp());
 }
 
@@ -28,11 +39,33 @@ class RealEstateCrmApp extends StatelessWidget {
   const RealEstateCrmApp({super.key});
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(title: 'Real Estate CRM', debugShowCheckedModeBanner: false, themeMode: ThemeMode.system, theme: _buildTheme(Brightness.light), darkTheme: _buildTheme(Brightness.dark), home: const MainDashboard());
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: themeNotifier,
+      builder: (_, ThemeMode currentMode, __) {
+        return MaterialApp(
+          title: 'Real Estate CRM',
+          debugShowCheckedModeBanner: false,
+          themeMode: currentMode, // <--- ရွေးချယ်ထားသော Theme အတိုင်းပြမည်
+          theme: _buildTheme(Brightness.light),
+          darkTheme: _buildTheme(Brightness.dark),
+          home: const MainDashboard(),
+        );
+      },
+    );
   }
+
   ThemeData _buildTheme(Brightness brightness) {
     final isDark = brightness == Brightness.dark;
-    return ThemeData(useMaterial3: true, brightness: brightness, colorScheme: ColorScheme.fromSeed(seedColor: isDark ? const Color(0xFF4DB6AC) : const Color(0xFF008080), brightness: brightness, surface: isDark ? const Color(0xFF1E2626) : const Color(0xFFFFFFFF)), scaffoldBackgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F8F8), cardTheme: CardThemeData(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), elevation: 2), inputDecorationTheme: InputDecorationTheme(border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))));
+    return ThemeData(
+      useMaterial3: true,
+      brightness: brightness,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: isDark ? const Color(0xFF4DB6AC) : const Color(0xFF008080),
+        brightness: brightness,
+      ),
+      scaffoldBackgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F8F8),
+      cardTheme: CardThemeData(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 2),
+    );
   }
 }
 
@@ -72,9 +105,6 @@ class _MainDashboardState extends State<MainDashboard> {
   @override
   void initState() { super.initState(); _loadProperties(); _loadBuyers(); }
 
-  @override
-  void dispose() { _pageController.dispose(); _searchController.dispose(); _priceFilterController.dispose(); super.dispose(); }
-
   Future<void> _loadProperties() async {
     setState(() => _isLoading = true);
     final data = await DatabaseHelper.instance.getAllProperties();
@@ -88,40 +118,16 @@ class _MainDashboardState extends State<MainDashboard> {
   }
 
   void _showAutoCloseSnackBar(String message, VoidCallback? onUndo) {
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.clearSnackBars();
-    messenger.showSnackBar(SnackBar(
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    scaffoldMessenger.clearSnackBars();
+    scaffoldMessenger.showSnackBar(SnackBar(
       behavior: SnackBarBehavior.floating,
       margin: const EdgeInsets.only(bottom: 80, left: 16, right: 16),
       content: Text(message),
       duration: const Duration(seconds: 3),
       action: onUndo != null ? SnackBarAction(label: 'Undo', textColor: Colors.yellow, onPressed: onUndo) : null,
     ));
-    Future.delayed(const Duration(seconds: 3), () => messenger.hideCurrentSnackBar());
-  }
-
-  void _deleteProperty(Map<String, dynamic> property) async {
-    setState(() => _properties.removeWhere((p) => p['id'] == property['id']));
-    await DatabaseHelper.instance.moveToRecycleBin('crm_properties', property['id']);
-    if (!mounted) return;
-    _showAutoCloseSnackBar('အိမ်ခြံမြေစာရင်းကို ဖျက်လိုက်ပါပြီ', () async { await DatabaseHelper.instance.restoreFromRecycleBin('crm_properties', property['id']); _loadProperties(); });
-  }
-
-  void _deleteBuyer(Map<String, dynamic> buyer) async {
-    setState(() => _buyers.removeWhere((b) => b['id'] == buyer['id']));
-    await DatabaseHelper.instance.moveToRecycleBin('crm_buyers', buyer['id']);
-    if (!mounted) return;
-    _showAutoCloseSnackBar('ဝယ်လက်စာရင်းကို ဖျက်လိုက်ပါပြီ', () async { await DatabaseHelper.instance.restoreFromRecycleBin('crm_buyers', buyer['id']); _loadBuyers(); });
-  }
-
-  void _onFilterCategoryChanged(String? categoryKey) async {
-    setState(() { _selectedFilterCategory = categoryKey; _selectedFilterValue = null; _currentSubFilterValues = []; _priceFilterController.clear(); });
-    if (categoryKey == 'status') { _currentSubFilterValues = ['Available', 'Pending', 'Sold Out']; } 
-    else if (categoryKey == 'location_id') { _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('location'); } 
-    else if (categoryKey == 'road_type') { _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('road_type'); }
-    else if (categoryKey == 'house_type') { _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('house_type'); }
-    else if (categoryKey == 'land_type') { _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('land_type'); }
-    setState(() {}); 
+    Future.delayed(const Duration(seconds: 3), () { if (mounted) scaffoldMessenger.hideCurrentSnackBar(); });
   }
 
   @override
@@ -140,7 +146,7 @@ class _MainDashboardState extends State<MainDashboard> {
         appBar: AppBar(
           automaticallyImplyLeading: false, 
           title: _isSearching && _currentIndex == 1 
-              ? TextField(controller: _searchController, autofocus: true, decoration: const InputDecoration(hintText: 'အမည်, နေရာ, ဈေးနှုန်း ရှာရန်...', border: InputBorder.none), onChanged: (val) => setState(() => _searchQuery = val))
+              ? TextField(controller: _searchController, autofocus: true, decoration: const InputDecoration(hintText: 'ရှာဖွေရန်...', border: InputBorder.none), onChanged: (val) => setState(() => _searchQuery = val))
               : const Text('CRM Dashboard', style: TextStyle(fontWeight: FontWeight.bold)), 
           actions: [ if (_currentIndex == 1) IconButton(icon: Icon(_isSearching ? Icons.close : Icons.search), onPressed: () { setState(() { _isSearching = !_isSearching; if (!_isSearching) { _searchQuery = ''; _searchController.clear(); } }); }) ]
         ),
@@ -148,19 +154,26 @@ class _MainDashboardState extends State<MainDashboard> {
           child: ListView(
             padding: EdgeInsets.zero,
             children: [
-              const DrawerHeader(decoration: BoxDecoration(color: Color(0xFF008080)), child: Text('Options', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold))),
-              ListTile(leading: const Icon(Icons.people), title: const Text('Owner List'), onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (context) => const OwnerListScreen())); }),
-              ListTile(leading: const Icon(Icons.cloud_sync), title: const Text('Cloud Sync (Manual)'), onTap: () {}),
-              ListTile(leading: const Icon(Icons.delete_outline, color: Colors.red), title: const Text('Recycle Bin'), onTap: () async { Navigator.pop(context); final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const RecycleBinScreen())); if (result == true) { _loadProperties(); _loadBuyers(); } }),
-              
-              // --- Settings ခလုတ်ကို အသက်သွင်းလိုက်ပါသည် ---
+              const DrawerHeader(
+                decoration: BoxDecoration(color: Color(0xFF008080)), 
+                child: Text('CRM Options', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold))
+              ),
+              ListTile(
+                leading: const Icon(Icons.people), 
+                title: const Text('Owner List'), 
+                onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (context) => const OwnerListScreen())); }
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red), 
+                title: const Text('Recycle Bin'), 
+                onTap: () async { Navigator.pop(context); final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const RecycleBinScreen())); if (result == true) { _loadProperties(); _loadBuyers(); } }
+              ),
+              const Divider(),
+              // Settings တစ်ခုတည်းသာ ထားရှိတော့ပါသည် (Sync ကို Setting ထဲသို့ ပို့လိုက်ပါပြီ)
               ListTile(
                 leading: const Icon(Icons.settings), 
                 title: const Text('Settings'), 
-                onTap: () { 
-                  Navigator.pop(context); 
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())); 
-                }
+                onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())); }
               ),
             ],
           ),
@@ -192,12 +205,24 @@ class _MainDashboardState extends State<MainDashboard> {
     }
     return Column(children: [
       Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), color: Theme.of(context).cardColor, child: Row(children: [
-        Expanded(flex: 5, child: DropdownButtonHideUnderline(child: DropdownButton<String>(isExpanded: true, hint: const Text('Filter By', style: TextStyle(fontWeight: FontWeight.bold)), value: _selectedFilterCategory, icon: const Icon(Icons.filter_list, size: 20), items: _filterCategories.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value, style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis))).toList(), onChanged: _onFilterCategoryChanged))),
+        Expanded(flex: 5, child: DropdownButtonHideUnderline(child: DropdownButton<String>(isExpanded: true, hint: const Text('Filter By', style: TextStyle(fontWeight: FontWeight.bold)), value: _selectedFilterCategory, icon: const Icon(Icons.filter_list, size: 20), items: _filterCategories.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value, style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis))).toList(), onChanged: (v) async {
+          setState(() { _selectedFilterCategory = v; _selectedFilterValue = null; _currentSubFilterValues = []; _priceFilterController.clear(); });
+          if (v == 'status') _currentSubFilterValues = ['Available', 'Pending', 'Sold Out'];
+          else if (v == 'location_id') _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('location');
+          else if (v == 'road_type') _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('road_type');
+          else if (v == 'house_type') _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('house_type');
+          else if (v == 'land_type') _currentSubFilterValues = await DatabaseHelper.instance.getMetadata('land_type');
+          setState(() {});
+        }))),
         const SizedBox(width: 8), Container(width: 1, height: 24, color: Colors.grey.shade300), const SizedBox(width: 8),
-        Expanded(flex: 5, child: _selectedFilterCategory == 'asking_price_lakhs' ? TextField(controller: _priceFilterController, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText: 'အများဆုံး (သိန်း)', border: InputBorder.none, isDense: true), onChanged: (_) => setState(() {})) : DropdownButtonHideUnderline(child: DropdownButton<String>(isExpanded: true, hint: const Text('ရွေးချယ်ရန်'), value: _selectedFilterValue, items: _currentSubFilterValues.map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis))).toList(), onChanged: _selectedFilterCategory == null ? null : (val) => setState(() => _selectedFilterValue = val)))),
+        Expanded(flex: 5, child: _selectedFilterCategory == 'asking_price_lakhs' ? TextField(controller: _priceFilterController, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText: 'အများဆုံး (သိန်း)', border: InputBorder.none, isDense: true), onChanged: (_) => setState(() {})) : DropdownButtonHideUnderline(child: DropdownButton<String>(isExpanded: true, hint: const Text('ရွေးချယ်ရန်'), value: _selectedFilterValue, items: _currentSubFilterValues.map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis))).toList(), onChanged: (val) => setState(() => _selectedFilterValue = val)))),
         if (_selectedFilterCategory != null) IconButton(icon: const Icon(Icons.cancel, color: Colors.grey, size: 20), onPressed: () => setState(() { _selectedFilterCategory = null; _selectedFilterValue = null; _currentSubFilterValues = []; _priceFilterController.clear(); }))
       ])),
-      Expanded(child: filteredProperties.isEmpty ? const Center(child: Text('စာရင်းမရှိပါ')) : ListView.builder(padding: const EdgeInsets.only(top: 8, bottom: 80), itemCount: filteredProperties.length, itemBuilder: (context, index) => PropertyMiniCard(property: filteredProperties[index], isSynced: false, onDelete: () => _deleteProperty(filteredProperties[index]), onEditCompleted: () => _loadProperties())))
+      Expanded(child: filteredProperties.isEmpty ? const Center(child: Text('စာရင်းမရှိပါ')) : ListView.builder(padding: const EdgeInsets.only(top: 8, bottom: 80), itemCount: filteredProperties.length, itemBuilder: (context, index) => PropertyMiniCard(property: filteredProperties[index], isSynced: false, onDelete: () {
+        setState(() => _properties.removeWhere((p) => p['id'] == filteredProperties[index]['id']));
+        DatabaseHelper.instance.moveToRecycleBin('crm_properties', filteredProperties[index]['id']);
+        _showAutoCloseSnackBar('ဖျက်ပြီးပါပြီ', () async { await DatabaseHelper.instance.restoreFromRecycleBin('crm_properties', filteredProperties[index]['id']); _loadProperties(); });
+      }, onEditCompleted: () => _loadProperties())))
     ]);
   }
 
@@ -213,10 +238,13 @@ class _MainDashboardState extends State<MainDashboard> {
     return ListView.builder(padding: const EdgeInsets.only(top: 8, bottom: 80), itemCount: filteredBuyers.length, itemBuilder: (context, index) {
       final buyer = filteredBuyers[index];
       List<dynamic> phones = []; try { phones = jsonDecode(buyer['phones'] ?? '[]'); } catch (_) {}
-      final budget = (buyer['budget_lakhs'] ?? 0).toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
       return Card(margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Expanded(child: Text(buyer['name'] ?? 'အမည်မသိ', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))), Text(TimeHelper.getRelativeTime(buyer['updated_at']), style: const TextStyle(fontSize: 11, color: Colors.grey)), IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20), onPressed: () => _deleteBuyer(buyer))]),
-        Text('$budget သိန်း • ${buyer['preferred_location']}', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Expanded(child: Text(buyer['name'] ?? 'အမည်မသိ', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))), Text(TimeHelper.getRelativeTime(buyer['updated_at']), style: const TextStyle(fontSize: 11, color: Colors.grey)), IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20), onPressed: () {
+          setState(() => _buyers.removeWhere((b) => b['id'] == buyer['id']));
+          DatabaseHelper.instance.moveToRecycleBin('crm_buyers', buyer['id']);
+          _showAutoCloseSnackBar('ဖျက်ပြီးပါပြီ', () async { await DatabaseHelper.instance.restoreFromRecycleBin('crm_buyers', buyer['id']); _loadBuyers(); });
+        })]),
+        Text('${buyer['budget_lakhs']} သိန်း • ${buyer['preferred_location']}', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
         if (phones.isNotEmpty) InkWell(onTap: () => launchUrl(Uri.parse('tel:${phones.first}')), child: Text(phones.join(', '), style: const TextStyle(color: Colors.blue, decoration: TextDecoration.underline))),
         Align(alignment: Alignment.centerRight, child: OutlinedButton(onPressed: () async { final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => BuyerFormScreen(editData: buyer))); if (result == true) _loadBuyers(); }, child: const Text('Edit')))
       ])));
