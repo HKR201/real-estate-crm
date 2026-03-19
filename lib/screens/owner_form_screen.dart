@@ -1,167 +1,138 @@
 import 'package:flutter/material.dart';
-import 'dart:convert'; 
-import 'package:uuid/uuid.dart';
 import '../db/database_helper.dart';
 
 class OwnerFormScreen extends StatefulWidget {
-  final Map<String, dynamic>? editData; // Edit Mode အတွက် ဒေတာလက်ခံရန် နေရာ
-
-  const OwnerFormScreen({super.key, this.editData});
+  final Map<String, dynamic>? editData;
+  final String? initialName; // ⚠️ အသစ်ထပ်တိုးထားသော Parameter
+  
+  const OwnerFormScreen({super.key, this.editData, this.initialName});
 
   @override
   State<OwnerFormScreen> createState() => _OwnerFormScreenState();
 }
 
-class _OwnerFormScreenState extends State<OwnerFormScreen> {
+// ⚠️ Keyboard Bug ရှင်းရန် WidgetsBindingObserver ကို သုံးထားသည်
+class _OwnerFormScreenState extends State<OwnerFormScreen> with WidgetsBindingObserver {
   final _formKey = GlobalKey<FormState>();
-  final _uuid = const Uuid();
-
-  final _nameController = TextEditingController();
-  final _remarkController = TextEditingController();
-  
-  List<TextEditingController> _phoneControllers = [TextEditingController()];
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _remarkController = TextEditingController();
+  bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
-    // Edit Mode ဖြစ်ပါက ယခင်ဒေတာများ ဖြည့်သွင်းမည်
+    WidgetsBinding.instance.addObserver(this); // App အဝင်/အထွက် စောင့်ကြည့်မည်
+
     if (widget.editData != null) {
-      final d = widget.editData!;
-      _nameController.text = d['name'] ?? '';
-      _remarkController.text = d['remark'] ?? '';
-      
+      _nameController.text = widget.editData!['name'] ?? '';
+      _remarkController.text = widget.editData!['remark'] ?? '';
+      // ဖုန်းနံပါတ်များ
       try {
-        List<dynamic> phones = jsonDecode(d['phones'] ?? '[]');
-        if (phones.isNotEmpty) {
-          _phoneControllers.clear(); // ပုံမှန်ပါနေသည့် ၁ ကွက်ကို ဖျက်မည်
-          for (var p in phones) {
-            _phoneControllers.add(TextEditingController(text: p.toString()));
-          }
+        final phones = widget.editData!['phones'];
+        if (phones != null && phones.toString().length > 2) {
+          _phoneController.text = phones.toString().replaceAll('[', '').replaceAll(']', '').replaceAll('"', '');
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint(e.toString());
+      }
+    } else if (widget.initialName != null) {
+      // ⚠️ Property Form မှ ရိုက်လက်စ နာမည်ပါလာပါက အလိုလို ဖြည့်ပေးမည်
+      _nameController.text = widget.initialName!;
     }
   }
 
+  // 1. Memory Management (Critical)
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _nameController.dispose();
+    _phoneController.dispose();
     _remarkController.dispose();
-    for (var controller in _phoneControllers) {
-      controller.dispose();
-    }
     super.dispose();
   }
 
-  void _addPhoneField() {
-    setState(() {
-      _phoneControllers.add(TextEditingController());
-    });
-  }
-
-  void _removePhoneField(int index) {
-    setState(() {
-      _phoneControllers[index].dispose();
-      _phoneControllers.removeAt(index);
-    });
+  // ⚠️ အခြား App သို့ ထွက်သွားပါက Keyboard ကို အလိုလို ဖြုတ်ချမည် (ပြန်ဝင်လာလျှင် Keyboard Error မတက်စေရန်)
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      FocusManager.instance.primaryFocus?.unfocus();
+    }
   }
 
   Future<void> _saveOwner() async {
-    if (_formKey.currentState!.validate()) {
-      final phones = _phoneControllers.map((c) => c.text.trim()).where((text) => text.isNotEmpty).toList();
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isSaving = true);
 
-      final ownerData = {
-        'id': widget.editData?['id'] ?? _uuid.v4(), // အဟောင်းဆိုလျှင် ID အဟောင်းသုံးမည်
-        'name': _nameController.text.trim(),
-        'phones': jsonEncode(phones), 
-        'remark': _remarkController.text.trim(),
-        'is_deleted': 0,
-        'updated_at': DateTime.now().toIso8601String(),
-      };
+    List<String> phoneList = _phoneController.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
 
+    Map<String, dynamic> data = {
+      'id': widget.editData?['id'] ?? 'owner_${DateTime.now().millisecondsSinceEpoch}',
+      'name': _nameController.text.trim(),
+      'phones': '["${phoneList.join('","')}"]',
+      'remark': _remarkController.text.trim(),
+      'is_deleted': 0,
+      'is_synced': 0,
+      'updated_at': DateTime.now().toUtc().toIso8601String(), // Last edit time
+    };
+
+    try {
       if (widget.editData == null) {
-        // အသစ်ထည့်ခြင်း
-        ownerData['created_at'] = DateTime.now().toIso8601String();
-        await DatabaseHelper.instance.insertOwner(ownerData);
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ပိုင်ရှင်စာရင်း အောင်မြင်စွာ သိမ်းဆည်းပြီးပါပြီ')));
+        data['created_at'] = DateTime.now().toUtc().toIso8601String();
+        await DatabaseHelper.instance.insertOwner(data);
       } else {
-        // အဟောင်းကို ပြင်ဆင်ခြင်း
-        ownerData['created_at'] = widget.editData!['created_at'];
-        await DatabaseHelper.instance.updateOwner(ownerData);
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ပိုင်ရှင်စာရင်း ပြင်ဆင်ပြီးပါပြီ')));
+        data['created_at'] = widget.editData!['created_at'];
+        await DatabaseHelper.instance.updateOwner(data);
       }
-
       if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      debugPrint("Owner Save Error: ${e.toString()}");
+      setState(() => _isSaving = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.editData == null ? 'ပိုင်ရှင်အသစ် မှတ်သားရန်' : 'ပိုင်ရှင်စာရင်း ပြင်ဆင်ရန်', style: const TextStyle(fontWeight: FontWeight.bold)),
-        leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.pop(context)),
-      ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16.0),
-          children: [
-            TextFormField(
-              controller: _nameController,
-              decoration: const InputDecoration(labelText: 'ပိုင်ရှင်အမည်', prefixIcon: Icon(Icons.person)),
-              validator: (value) => value!.isEmpty ? 'အမည် ထည့်ပေးပါ' : null,
-            ),
-            const SizedBox(height: 24),
-
-            const Text('ဖုန်းနံပါတ်များ', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-            const SizedBox(height: 8),
-            
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(), 
-              itemCount: _phoneControllers.length,
-              itemBuilder: (context, index) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12.0),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: _phoneControllers[index],
-                          keyboardType: TextInputType.phone,
-                          decoration: InputDecoration(labelText: 'ဖုန်းနံပါတ် ${index + 1}', prefixIcon: const Icon(Icons.phone)),
-                        ),
-                      ),
-                      if (_phoneControllers.length > 1)
-                        IconButton(icon: const Icon(Icons.remove_circle, color: Colors.red), onPressed: () => _removePhoneField(index)),
-                    ],
-                  ),
-                );
-              },
-            ),
-            
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: _addPhoneField, icon: const Icon(Icons.add), label: const Text('ဖုန်းနံပါတ် ထပ်ထည့်မည်'),
-                style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.primary),
+    return GestureDetector(
+      onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(widget.editData == null ? 'ပိုင်ရှင်အသစ် ထည့်ရန်' : 'ပိုင်ရှင်အချက်အလက် ပြင်ရန်', style: const TextStyle(fontSize: 18)),
+          actions: [ if (_isSaving) const Padding(padding: EdgeInsets.all(16.0), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))) ],
+        ),
+        body: Form(
+          key: _formKey,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            physics: const BouncingScrollPhysics(),
+            children: [
+              TextFormField(
+                controller: _nameController,
+                decoration: const InputDecoration(labelText: 'အမည် *', border: OutlineInputBorder()),
+                validator: (v) => v == null || v.isEmpty ? 'အမည် ထည့်ပါ' : null,
               ),
-            ),
-            const SizedBox(height: 16),
-
-            TextFormField(controller: _remarkController, maxLines: 3, decoration: const InputDecoration(labelText: 'မှတ်ချက်', alignLabelWithHint: true)),
-            const SizedBox(height: 32),
-
-            SizedBox(
-              width: double.infinity, height: 50,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Theme.of(context).colorScheme.onPrimary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-                onPressed: _saveOwner,
-                child: Text(widget.editData == null ? 'သိမ်းမည်' : 'ပြင်ဆင်ချက် သိမ်းမည်', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _phoneController,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(labelText: 'ဖုန်းနံပါတ် (ခွဲရေးရန် ကော်မာခံပါ)', border: OutlineInputBorder()),
               ),
-            ),
-            const SizedBox(height: 40),
-          ],
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _remarkController,
+                maxLines: 3,
+                decoration: const InputDecoration(labelText: 'မှတ်ချက်', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 24),
+              SafeArea(
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 50), backgroundColor: const Color(0xFF008080), foregroundColor: Colors.white),
+                  onPressed: _isSaving ? null : _saveOwner,
+                  child: const Text('သိမ်းမည်', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
