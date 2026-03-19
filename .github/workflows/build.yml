@@ -26,8 +26,11 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: ⚙️ အဆင့် (၄) - Android Engine ဖိုင်များ အလိုအလျောက် တည်ဆောက်ခြင်း (Fix)
+      - name: ⚙️ အဆင့် (၄) - Android Engine ဖိုင်များ အလိုအလျောက် တည်ဆောက်ခြင်း
         run: flutter create --platforms=android --org com.tkr .
+
+      - name: 🌐 အဆင့် (၄.၅) - အင်တာနက် သုံးခွင့် (Internet Permission) အလိုအလျောက် ထည့်သွင်းခြင်း
+        run: sed -i '/<manifest/a \    <uses-permission android:name="android.permission.INTERNET"/>' android/app/src/main/AndroidManifest.xml
 
       - name: 📦 အဆင့် (၅) - လိုအပ်သော Packages များ သွင်းခြင်း
         run: flutter pub get
