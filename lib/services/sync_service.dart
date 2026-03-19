@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:path_provider/path_provider.dart'; // <--- အသစ်ထပ်တိုးထားသည်
 import '../db/database_helper.dart';
 
 class SyncService {
@@ -66,19 +67,38 @@ class SyncService {
 
     onProgress("Cloud မှ အိမ်ခြံမြေနှင့် ဓာတ်ပုံများ ရယူနေသည်...");
     final properties = await _supabase.from('crm_properties').select();
+    
+    // ဖုန်းအသစ်/App အသစ်၏ လမ်းကြောင်းအမှန်ကို ရယူခြင်း
+    final appDir = await getApplicationDocumentsDirectory();
+    final photosDir = Directory('${appDir.path}/property_photos');
+
     for (var row in properties) {
-      await db.insert('crm_properties', row, conflictAlgorithm: ConflictAlgorithm.replace);
-      
-      // ဓာတ်ပုံများကို Cloud မှ ပြန်လည်ဒေါင်းလုဒ်လုပ်ခြင်း
-      if (row['extra_data'] != null) {
+      Map<String, dynamic> mutableRow = Map<String, dynamic>.from(row);
+
+      // ဓာတ်ပုံများကို ပြန်လည်ဒေါင်းလုဒ်လုပ်ပြီး လမ်းကြောင်း Update လုပ်ခြင်း
+      if (mutableRow['extra_data'] != null) {
         try {
-          final extraData = jsonDecode(row['extra_data'] as String);
+          final extraData = jsonDecode(mutableRow['extra_data'] as String);
           if (extraData['photos'] != null) {
             List<String> photoPaths = List<String>.from(extraData['photos']);
-            for (String localPath in photoPaths) await _downloadPhoto(localPath);
+            List<String> newPhotoPaths = [];
+
+            for (String localPath in photoPaths) {
+              final fileName = localPath.split('/').last;
+              final newLocalPath = '${photosDir.path}/$fileName';
+              newPhotoPaths.add(newLocalPath); // လမ်းကြောင်းအသစ်ကို မှတ်မည်
+              
+              await _downloadPhoto(fileName, newLocalPath);
+            }
+            
+            // Database ထဲသို့ လမ်းကြောင်းအမှန် ပြန်ထည့်ပေးခြင်း
+            extraData['photos'] = newPhotoPaths;
+            mutableRow['extra_data'] = jsonEncode(extraData);
           }
         } catch (_) {}
       }
+      // လမ်းကြောင်းအသစ်ပါသော ဒေတာကို SQLite သို့ သွင်းမည်
+      await db.insert('crm_properties', mutableRow, conflictAlgorithm: ConflictAlgorithm.replace);
     }
 
     onProgress("Cloud မှ အမျိုးအစားများ ရယူနေသည်...");
@@ -86,15 +106,14 @@ class SyncService {
     for (var row in metadata) await db.insert('crm_metadata', row, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  static Future<void> _downloadPhoto(String localPath) async {
-    final file = File(localPath);
-    if (await file.exists()) return; // ဖုန်းထဲမှာ ပုံရှိပြီးသားဆိုရင် ထပ်မဒေါင်းတော့ပါ
+  static Future<void> _downloadPhoto(String fileName, String savePath) async {
+    final file = File(savePath);
+    if (await file.exists()) return; // ပုံရှိပြီးသားဆိုလျှင် ကျော်သွားမည်
 
-    final fileName = localPath.split('/').last;
     try {
       final bytes = await _supabase.storage.from('property-photos').download(fileName);
-      await file.parent.create(recursive: true); // Folder မရှိသေးရင် တည်ဆောက်မည်
-      await file.writeAsBytes(bytes); // ဓာတ်ပုံဖိုင်ကို ဖုန်းထဲ သိမ်းမည်
+      await file.parent.create(recursive: true); 
+      await file.writeAsBytes(bytes); 
     } catch (_) {}
   }
 }
