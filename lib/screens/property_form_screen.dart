@@ -7,7 +7,7 @@ import 'dart:io';
 import 'dart:convert';
 import '../db/database_helper.dart';
 import '../widgets/dynamic_dropdown.dart';
-import 'owner_form_screen.dart'; 
+import 'owner_form_screen.dart';
 
 class PropertyFormScreen extends StatefulWidget {
   final Map<String, dynamic>? editData;
@@ -28,10 +28,10 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
   final TextEditingController _northController = TextEditingController();
   final TextEditingController _remarkController = TextEditingController();
   final TextEditingController _mapLinkController = TextEditingController();
-  final TextEditingController _ownerSearchController = TextEditingController(); 
+  final TextEditingController _ownerSearchController = TextEditingController();
 
   String? _status = 'Available';
-  String? _propertyType = 'အိမ်အပါ'; 
+  String? _propertyType = 'အိမ်အပါ';
   String? _location;
   String? _roadType;
   String? _houseType;
@@ -45,8 +45,8 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this); 
-    
+    WidgetsBinding.instance.addObserver(this);
+
     if (widget.editData != null) {
       final d = widget.editData!;
       _titleController.text = d['title'] ?? '';
@@ -118,7 +118,6 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
     }
   }
 
-  // ⚠️ ကင်မရာ နှင့် Gallery ရွေးချယ်ခွင့် ပြန်လည်ထည့်သွင်းထားသော ဓာတ်ပုံ Function
   Future<void> _pickImages(bool isCamera) async {
     try {
       final picker = ImagePicker();
@@ -213,16 +212,16 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
       'status': _status,
       'location_id': _location,
       'road_type': _roadType,
-      'house_type': _propertyType == 'ခြံသီးသန့်' ? null : _houseType, 
+      'house_type': _propertyType == 'ခြံသီးသန့်' ? null : _houseType,
       'land_type': _landType,
       'owner_id': _ownerId,
       'is_deleted': 0,
-      'is_synced': 0, 
+      'is_synced': 0,
       'extra_data': jsonEncode({
         'photos': _photoPaths,
-        'property_type': _propertyType, 
+        'property_type': _propertyType,
       }),
-      'updated_at': DateTime.now().toUtc().toIso8601String(), 
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
     };
 
     try {
@@ -246,19 +245,19 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
       child: Scaffold(
         appBar: AppBar(
           title: Text(widget.editData == null ? 'အိမ်ခြံမြေ အသစ်ထည့်ရန်' : 'အိမ်ခြံမြေ ပြင်ဆင်ရန်', style: const TextStyle(fontSize: 18)),
-          actions: [ 
-            if (_isSaving) 
+          actions: [
+            if (_isSaving)
               const Padding(
-                padding: EdgeInsets.all(16.0), 
-                child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-              ) 
+                padding: EdgeInsets.all(16.0),
+                child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+              ),
           ],
         ),
         body: Form(
           key: _formKey,
           child: ListView(
             padding: const EdgeInsets.all(16),
-            physics: const BouncingScrollPhysics(), 
+            physics: const BouncingScrollPhysics(),
             children: [
               TextFormField(
                 controller: _titleController,
@@ -272,7 +271,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
                 items: ['အိမ်အပါ', 'ခြံသီးသန့်'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
                 onChanged: (v) => setState(() {
                   _propertyType = v;
-                  if (v == 'ခြံသီးသန့်') _houseType = null; 
+                  if (v == 'ခြံသီးသန့်') _houseType = null;
                 }),
               ),
               const SizedBox(height: 16),
@@ -280,19 +279,19 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
                 children: [
                   Expanded(
                     child: TextFormField(
-                      controller: _askingPriceController, 
-                      keyboardType: TextInputType.number, 
-                      decoration: const InputDecoration(labelText: 'ခေါ်ဈေး (သိန်း) *', border: OutlineInputBorder()), 
-                      validator: (v) => v == null || v.isEmpty ? 'ဈေးနှုန်း ထည့်ပါ' : null
-                    )
+                      controller: _askingPriceController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'ခေါ်ဈေး (သိန်း) *', border: OutlineInputBorder()),
+                      validator: (v) => v == null || v.isEmpty ? 'ဈေးနှုန်း ထည့်ပါ' : null,
+                    ),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: TextFormField(
-                      controller: _bottomPriceController, 
-                      keyboardType: TextInputType.number, 
-                      decoration: const InputDecoration(labelText: 'အောက်ဆုံးဈေး (သိန်း)', border: OutlineInputBorder())
-                    )
+                      controller: _bottomPriceController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'အောက်ဆုံးဈေး (သိန်း)', border: OutlineInputBorder()),
+                    ),
                   ),
                 ],
               ),
@@ -325,27 +324,35 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
                 ],
               ),
               const SizedBox(height: 16),
-              
-              if (_propertyType != 'ခြံသီးသန့်') ...[
-                DynamicDropdown(label: 'အိမ်အမျိုးအစား', category: 'house_type', selectedValue: _houseType, onChanged: (v) => setState(() => _houseType = v)),
-                const SizedBox(height: 16),
-              ],
-              
+
+              if (_propertyType != 'ခြံသီးသန့်')
+                Column(
+                  children: [
+                    DynamicDropdown(label: 'အိမ်အမျိုးအစား', category: 'house_type', selectedValue: _houseType, onChanged: (v) => setState(() => _houseType = v)),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+
               const Text('ပိုင်ရှင်အချက်အလက်', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
               const SizedBox(height: 8),
-              
+
               Autocomplete<Map<String, dynamic>>(
-                displayStringForOption: (option) => option['name'],
+                // ⚠️ အရေးကြီး: Field ထဲတွင် ပြမည့်စာသားကို ဤနေရာက ထိန်းချုပ်သည် (ရုပ်ဆိုးသော စာသားမဝင်စေရန် raw_name ကိုသာ သုံးမည်)
+                displayStringForOption: (option) => option['id'] == '__ADD_NEW__' ? option['raw_name'] : option['name'],
                 optionsBuilder: (TextEditingValue textEditingValue) {
+                  if (textEditingValue.text.isEmpty) return const Iterable<Map<String, dynamic>>.empty();
+                  
                   final query = textEditingValue.text.toLowerCase();
                   final matches = _owners.where((owner) {
                     return (owner['name'] as String).toLowerCase().contains(query);
                   }).toList();
 
-                  if (query.isNotEmpty) {
+                  // ရှာတွေ့သော နာမည် အတိအကျမရှိမှသာ Add New ကို ပြမည်
+                  final exactMatch = _owners.any((owner) => (owner['name'] as String).toLowerCase() == query);
+                  if (!exactMatch) {
                     matches.add({
                       'id': '__ADD_NEW__',
-                      'name': '➕ ပိုင်ရှင်အသစ်ထည့်မည်: "${textEditingValue.text}"',
+                      'name': '➕ "${textEditingValue.text}" ကို အသစ်ထည့်မည်',
                       'raw_name': textEditingValue.text
                     });
                   }
@@ -353,14 +360,16 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
                 },
                 onSelected: (Map<String, dynamic> selection) async {
                   if (selection['id'] == '__ADD_NEW__') {
+                    setState(() => _ownerId = null);
                     final result = await Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => OwnerFormScreen(initialName: selection['raw_name']))
+                      MaterialPageRoute(builder: (_) => OwnerFormScreen(initialName: selection['raw_name'])),
                     );
                     if (result == true) {
                       await _loadOwners();
                       _ownerSearchController.clear();
-                      setState(() => _ownerId = null);
+                    } else {
+                      _ownerSearchController.clear();
                     }
                   } else {
                     setState(() {
@@ -380,6 +389,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
                     decoration: InputDecoration(
                       labelText: 'ပိုင်ရှင်အမည် ရှာရန် (သို့) အသစ်ရိုက်ထည့်ရန်',
                       border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.person, color: Colors.grey),
                       suffixIcon: controller.text.isNotEmpty
                           ? IconButton(
                               icon: const Icon(Icons.clear),
@@ -398,15 +408,19 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
                   );
                 },
                 optionsViewBuilder: (context, onSelected, options) {
-                  final theme = Theme.of(context); // ⚠️ Dark Mode Contrast ဖြေရှင်းရန် Theme ရယူခြင်း
+                  final theme = Theme.of(context);
+                  final isDark = theme.brightness == Brightness.dark;
                   return Align(
                     alignment: Alignment.topLeft,
                     child: Material(
                       elevation: 4.0,
-                      color: theme.cardColor, // ⚠️ အမည်းရောင်ဖြစ်နေခြင်းကို ပြင်ဆင်ထားသည်
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      color: theme.cardColor, 
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        side: BorderSide(color: isDark ? Colors.grey.shade800 : Colors.grey.shade300)
+                      ),
                       child: ConstrainedBox(
-                        constraints: BoxConstraints(maxHeight: 200, maxWidth: MediaQuery.of(context).size.width - 32),
+                        constraints: BoxConstraints(maxHeight: 250, maxWidth: MediaQuery.of(context).size.width - 32),
                         child: ListView.builder(
                           padding: EdgeInsets.zero,
                           shrinkWrap: true,
@@ -416,13 +430,13 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
                             final isAddNew = option['id'] == '__ADD_NEW__';
                             return ListTile(
                               leading: Icon(
-                                isAddNew ? Icons.person_add : Icons.person, 
-                                color: isAddNew ? Colors.blue : theme.iconTheme.color // ⚠️ Theme အရောင်သုံးထားသည်
+                                isAddNew ? Icons.add_circle_outline : Icons.person, 
+                                color: isAddNew ? theme.colorScheme.primary : Colors.grey
                               ),
                               title: Text(
                                 option['name'], 
                                 style: TextStyle(
-                                  color: isAddNew ? Colors.blue : theme.textTheme.bodyLarge?.color, // ⚠️ Theme အရောင်သုံးထားသည်
+                                  color: isAddNew ? theme.colorScheme.primary : theme.textTheme.bodyLarge?.color,
                                   fontWeight: isAddNew ? FontWeight.bold : FontWeight.normal
                                 )
                               ),
@@ -436,7 +450,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
                 },
               ),
               const SizedBox(height: 16),
-              
+
               TextFormField(
                 controller: _mapLinkController,
                 decoration: InputDecoration(
@@ -449,22 +463,22 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
               const Text('ဓာတ်ပုံများ:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
               const SizedBox(height: 8),
               InkWell(
-                onTap: _showImageSourceBottomSheet, // ⚠️ Camera / Gallery ရွေးရန် ပြောင်းထားသည်
+                onTap: _showImageSourceBottomSheet,
                 child: Container(
                   height: 80,
                   width: double.infinity,
                   decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(8)),
                   child: const Column(
-                    mainAxisAlignment: MainAxisAlignment.center, 
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.add_a_photo, color: Colors.grey), 
-                      SizedBox(height: 4), 
-                      Text('ဓာတ်ပုံများ ထည့်ရန်', style: TextStyle(color: Colors.grey))
-                    ]
+                      Icon(Icons.add_a_photo, color: Colors.grey),
+                      SizedBox(height: 4),
+                      Text('ဓာတ်ပုံများ ထည့်ရန်', style: TextStyle(color: Colors.grey)),
+                    ],
                   ),
                 ),
               ),
-              
+
               if (_photoPaths.isNotEmpty) const SizedBox(height: 16),
               if (_photoPaths.isNotEmpty)
                 SizedBox(
@@ -515,20 +529,20 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
                     },
                   ),
                 ),
-                
+
               const SizedBox(height: 16),
               TextFormField(
-                controller: _remarkController, 
-                maxLines: 3, 
-                decoration: const InputDecoration(labelText: 'မှတ်ချက်', border: OutlineInputBorder())
+                controller: _remarkController,
+                maxLines: 3,
+                decoration: const InputDecoration(labelText: 'မှတ်ချက်', border: OutlineInputBorder()),
               ),
               const SizedBox(height: 24),
               SafeArea(
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 50), 
-                    backgroundColor: const Color(0xFF008080), 
-                    foregroundColor: Colors.white
+                    minimumSize: const Size(double.infinity, 50),
+                    backgroundColor: const Color(0xFF008080),
+                    foregroundColor: Colors.white,
                   ),
                   onPressed: _isSaving ? null : _saveProperty,
                   child: const Text('သိမ်းမည်', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
