@@ -11,26 +11,27 @@ class SyncService {
     final db = await DatabaseHelper.instance.database;
 
     // ၁။ Owners Sync
-    onProgress("Syncing Owners...");
+    onProgress("Owners စာရင်းများကို Cloud သို့ ပို့နေသည်...");
     final owners = await db.query('crm_owners');
     for (var row in owners) {
       await _supabase.from('crm_owners').upsert(row);
     }
 
     // ၂။ Buyers Sync
-    onProgress("Syncing Buyers...");
+    onProgress("Buyers စာရင်းများကို Cloud သို့ ပို့နေသည်...");
     final buyers = await db.query('crm_buyers');
     for (var row in buyers) {
       await _supabase.from('crm_buyers').upsert(row);
     }
 
     // ၃။ Properties Sync (Photos အပါအဝင်)
-    onProgress("Syncing Properties & Photos...");
+    onProgress("အိမ်ခြံမြေနှင့် ဓာတ်ပုံများကို Cloud သို့ ပို့နေသည်...");
     final properties = await db.query('crm_properties');
     for (var row in properties) {
       // ဓာတ်ပုံများ Upload လုပ်ခြင်း
       if (row['extra_data'] != null) {
-        final extraData = jsonDecode(row['extra_data']);
+        // Error တက်သည့်နေရာအား 'as String' ဖြင့် ပြင်ဆင်ထားပါသည်
+        final extraData = jsonDecode(row['extra_data'] as String);
         if (extraData['photos'] != null) {
           List<String> photoPaths = List<String>.from(extraData['photos']);
           for (String localPath in photoPaths) {
@@ -42,7 +43,7 @@ class SyncService {
     }
 
     // ၄။ Metadata Sync
-    onProgress("Syncing Metadata...");
+    onProgress("အမျိုးအစား စာရင်းများကို Cloud သို့ ပို့နေသည်...");
     final metadata = await db.query('crm_metadata');
     for (var row in metadata) {
       await _supabase.from('crm_metadata').upsert(row);
@@ -56,10 +57,14 @@ class SyncService {
 
     final fileName = localPath.split('/').last;
     try {
-      // Bucket ထဲမှာ ရှိပြီးသားဆိုရင် ကျော်သွားမယ်
+      // Bucket ထဲမှာ ရှိပြီးသားဆိုရင် ကျော်သွားမည် (upsert: true)
       await _supabase.storage.from('property-photos').upload(
-        fileName, file, fileOptions: const FileOptions(upsert: true)
+        fileName, 
+        file, 
+        fileOptions: const FileOptions(upsert: true)
       );
-    } catch (_) {}
+    } catch (_) {
+      // Upload မအောင်မြင်ပါက ကျော်သွားမည်
+    }
   }
 }
