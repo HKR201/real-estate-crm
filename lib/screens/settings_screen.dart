@@ -5,9 +5,11 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:sqflite/sqflite.dart';
-import 'package:archive/archive_io.dart'; // Zip library
+import 'package:archive/archive_io.dart';
 import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../db/database_helper.dart';
+import '../main.dart'; // themeNotifier ကို သုံးရန်
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -18,8 +20,32 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _isProcessing = false;
   String _statusMessage = "";
+  String _currentTheme = 'system';
 
-  // --- ဒေတာရော၊ ဓာတ်ပုံရော Zip အဖြစ် ထုတ်ယူခြင်း ---
+  @override
+  void initState() {
+    super.initState();
+    _loadCurrentTheme();
+  }
+
+  void _loadCurrentTheme() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _currentTheme = prefs.getString('themeMode') ?? 'system';
+    });
+  }
+
+  void _updateTheme(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('themeMode', value);
+    setState(() => _currentTheme = value);
+    
+    if (value == 'light') themeNotifier.value = ThemeMode.light;
+    else if (value == 'dark') themeNotifier.value = ThemeMode.dark;
+    else themeNotifier.value = ThemeMode.system;
+  }
+
+  // (Export/Import Backup logic များသည် ယခင်အတိုင်းဖြစ်ပါသည်...)
   Future<void> _exportBackup() async {
     setState(() { _isProcessing = true; _statusMessage = "Backup ထုပ်ပိုးနေပါသည်..."; });
     try {
@@ -30,33 +56,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final metadata = await db.query('crm_metadata');
 
       Map<String, dynamic> jsonData = {
-        'properties': properties,
-        'owners': owners,
-        'buyers': buyers,
-        'metadata': metadata,
+        'properties': properties, 'owners': owners, 'buyers': buyers, 'metadata': metadata,
       };
 
       final appDir = await getApplicationDocumentsDirectory();
       final photosDir = Directory(p.join(appDir.path, 'property_photos'));
       
-      // Zip ထုပ်ပိုးရန် ပြင်ဆင်ခြင်း
       var encoder = ZipFileEncoder();
-      final zipPath = p.join((await getTemporaryDirectory()).path, 'CRM_Full_Backup_${DateTime.now().millisecondsSinceEpoch}.zip');
+      final zipPath = p.join((await getTemporaryDirectory()).path, 'CRM_Full_Backup.zip');
       encoder.create(zipPath);
 
-      // ၁။ JSON ဒေတာဖိုင်ကို ထည့်မည်
       final jsonFile = File(p.join((await getTemporaryDirectory()).path, 'data.json'));
       await jsonFile.writeAsString(jsonEncode(jsonData));
       encoder.addFile(jsonFile);
-
-      // ၂။ ဓာတ်ပုံများရှိလျှင် ဓာတ်ပုံ Folder တစ်ခုလုံးကို ထည့်မည်
-      if (await photosDir.exists()) {
-        encoder.addDirectory(photosDir);
-      }
-
+      if (await photosDir.exists()) encoder.addDirectory(photosDir);
       encoder.close();
-      await Share.shareXFiles([XFile(zipPath)], text: 'Real Estate CRM Full Backup (Images Included)');
 
+      await Share.shareXFiles([XFile(zipPath)], text: 'Real Estate CRM Full Backup');
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
@@ -64,63 +80,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  // --- Zip Backup ဖိုင်ကို ပြန်သွင်းခြင်း ---
   Future<void> _importBackup() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['zip']);
     if (result == null) return;
-
-    setState(() { _isProcessing = true; _statusMessage = "ဒေတာများ ပြန်သွင်းနေပါသည်..."; });
+    setState(() { _isProcessing = true; _statusMessage = "ပြန်လည်သွင်းယူနေပါသည်..."; });
     try {
       final bytes = await File(result.files.single.path!).readAsBytes();
       final archive = ZipDecoder().decodeBytes(bytes);
-
       final appDir = await getApplicationDocumentsDirectory();
       final db = await DatabaseHelper.instance.database;
       Map<String, dynamic>? jsonData;
 
-      // Zip ထဲက ဖိုင်တွေကို တစ်ခုချင်း ပြန်ထုတ်မည်
       for (final file in archive) {
-        final filename = file.name;
         if (file.isFile) {
           final data = file.content as List<int>;
-          
-          if (filename == 'data.json') {
-            jsonData = jsonDecode(utf8.decode(data));
-          } else if (filename.contains('property_photos/')) {
-            // ဓာတ်ပုံဖိုင်များကို property_photos folder ထဲသို့ ပြန်ထည့်မည်
-            final String relativePath = filename; // e.g. property_photos/123.jpg
-            final File f = File(p.join(appDir.path, relativePath));
-            await f.create(recursive: true);
-            await f.writeAsBytes(data);
+          if (file.name == 'data.json') jsonData = jsonDecode(utf8.decode(data));
+          else if (file.name.contains('property_photos/')) {
+            final f = File(p.join(appDir.path, file.name));
+            await f.create(recursive: true); await f.writeAsBytes(data);
           }
         }
       }
 
-      // Database ထဲသို့ ဒေတာများ သွင်းမည်
       if (jsonData != null) {
         await db.transaction((txn) async {
-          if (jsonData!['properties'] != null) {
-            for (var item in jsonData['properties']) {
-              var mutableItem = Map<String, dynamic>.from(item);
-              // မှတ်ချက် - ဖုန်းအသစ်မှာ App Path ပြောင်းနိုင်သဖြင့် Path ကို Update လုပ်ရန် လိုအပ်နိုင်သည်
-              await txn.insert('crm_properties', mutableItem, conflictAlgorithm: ConflictAlgorithm.replace);
+          for (var k in ['properties', 'owners', 'buyers', 'metadata']) {
+            if (jsonData![k] != null) {
+              for (var item in jsonData[k]) await txn.insert('crm_$k', item, conflictAlgorithm: ConflictAlgorithm.replace);
             }
-          }
-          if (jsonData['owners'] != null) {
-            for (var item in jsonData['owners']) await txn.insert('crm_owners', item, conflictAlgorithm: ConflictAlgorithm.replace);
-          }
-          if (jsonData['buyers'] != null) {
-            for (var item in jsonData['buyers']) await txn.insert('crm_buyers', item, conflictAlgorithm: ConflictAlgorithm.replace);
-          }
-          if (jsonData['metadata'] != null) {
-            for (var item in jsonData['metadata']) await txn.insert('crm_metadata', item, conflictAlgorithm: ConflictAlgorithm.replace);
           }
         });
       }
-
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ဒေတာနှင့် ဓာတ်ပုံများ အားလုံး ပြန်သွင်းပြီးပါပြီ'), backgroundColor: Colors.green));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('အောင်မြင်စွာ ပြန်သွင်းပြီးပါပြီ'), backgroundColor: Colors.green));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Restore Error: $e'), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
     } finally {
       setState(() { _isProcessing = false; _statusMessage = ""; });
     }
@@ -129,53 +122,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings & Sync')),
+      appBar: AppBar(title: const Text('Settings')),
       body: Stack(
         children: [
           ListView(
             children: [
-              const ListTile(title: Text('Cloud Services', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal))),
-              ListTile(
-                leading: const Icon(Icons.cloud_sync),
-                title: const Text('Manual Cloud Sync'),
-                subtitle: const Text('Supabase Cloud ပေါ်သို့ အခုချက်ချင်း ဒေတာတင်မည်'),
-                onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cloud Sync လုပ်ဆောင်ချက်ကို နောက်တစ်ဆင့်တွင် ထည့်သွင်းပေးပါမည်'))),
+              // --- Theme Appearance ---
+              const ListTile(title: Text('Appearance', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal))),
+              RadioListTile<String>(
+                title: const Text('System Default'),
+                value: 'system', groupValue: _currentTheme,
+                onChanged: (v) => _updateTheme(v!),
+              ),
+              RadioListTile<String>(
+                title: const Text('Light Mode'),
+                value: 'light', groupValue: _currentTheme,
+                onChanged: (v) => _updateTheme(v!),
+              ),
+              RadioListTile<String>(
+                title: const Text('Dark Mode'),
+                value: 'dark', groupValue: _currentTheme,
+                onChanged: (v) => _updateTheme(v!),
               ),
               const Divider(),
-              const ListTile(title: Text('Full Offline Backup (ဓာတ်ပုံများပါဝင်သည်)', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal))),
+
+              // --- Cloud Sync (Manual) ---
+              const ListTile(title: Text('Data Synchronization', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal))),
+              ListTile(
+                leading: const Icon(Icons.cloud_sync, color: Colors.teal),
+                title: const Text('Manual Cloud Sync'),
+                subtitle: const Text('Supabase Cloud ပေါ်သို့ ဒေတာတင်မည်'),
+                onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Syncing... (Next Step)'))),
+              ),
+              const Divider(),
+
+              // --- Offline Backup ---
+              const ListTile(title: Text('Offline Backup', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal))),
               ListTile(
                 leading: const Icon(Icons.archive, color: Colors.blue),
-                title: const Text('Export Full Backup (.zip)'),
-                subtitle: const Text('ဒေတာနှင့် ဓာတ်ပုံများအားလုံးကို Zip ထုပ်၍ သိမ်းမည်'),
+                title: const Text('Export Backup (.zip)'),
                 onTap: _isProcessing ? null : _exportBackup,
               ),
               ListTile(
                 leading: const Icon(Icons.unarchive, color: Colors.orange),
-                title: const Text('Import Full Backup (.zip)'),
-                subtitle: const Text('Zip ဖိုင်မှ ဒေတာနှင့် ဓာတ်ပုံများ ပြန်သွင်းမည်'),
+                title: const Text('Import Backup (.zip)'),
                 onTap: _isProcessing ? null : _importBackup,
               ),
             ],
           ),
           if (_isProcessing) 
-            Container(
-              color: Colors.black.withOpacity(0.3),
-              child: Center(
-                child: Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const CircularProgressIndicator(),
-                        const SizedBox(height: 16),
-                        Text(_statusMessage),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
+            Container(color: Colors.black45, child: Center(child: Card(child: Padding(padding: const EdgeInsets.all(20), child: Column(mainAxisSize: MainAxisSize.min, children: [const CircularProgressIndicator(), const SizedBox(height: 10), Text(_statusMessage)]))))),
         ],
       ),
     );
