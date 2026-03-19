@@ -28,7 +28,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
   final TextEditingController _northController = TextEditingController();
   final TextEditingController _remarkController = TextEditingController();
   final TextEditingController _mapLinkController = TextEditingController();
-  final TextEditingController _ownerSearchController = TextEditingController(); // Owner Autocomplete အတွက်
+  final TextEditingController _ownerSearchController = TextEditingController(); 
 
   String? _status = 'Available';
   String? _propertyType = 'အိမ်အပါ'; 
@@ -45,7 +45,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this); // Keyboard bug ကာကွယ်ရန်
+    WidgetsBinding.instance.addObserver(this); 
     
     if (widget.editData != null) {
       final d = widget.editData!;
@@ -78,7 +78,6 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
     _loadOwners();
   }
 
-  // 1. Memory Management
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -95,7 +94,6 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
     super.dispose();
   }
 
-  // ⚠️ Keyboard Bug အမြစ်ပြတ်ရှင်းလင်းခြင်း (App အဝင်/အထွက်တွင် Focus ဖြုတ်မည်)
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
@@ -109,7 +107,6 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
       if (mounted) {
         setState(() {
           _owners = owners;
-          // Edit လုပ်ချိန်တွင် Owner နာမည်ကို Autocomplete ထဲသို့ ကြိုတင်ဖြည့်ထားမည်
           if (_ownerId != null && _ownerSearchController.text.isEmpty) {
             final match = _owners.where((o) => o['id'] == _ownerId).toList();
             if (match.isNotEmpty) _ownerSearchController.text = match.first['name'];
@@ -184,7 +181,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
         'photos': _photoPaths,
         'property_type': _propertyType, 
       }),
-      'updated_at': DateTime.now().toUtc().toIso8601String(), // ⚠️ Last Edit time ကို သိမ်းမည်
+      'updated_at': DateTime.now().toUtc().toIso8601String(), 
     };
 
     try {
@@ -209,7 +206,13 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
       child: Scaffold(
         appBar: AppBar(
           title: Text(widget.editData == null ? 'အိမ်ခြံမြေ အသစ်ထည့်ရန်' : 'အိမ်ခြံမြေ ပြင်ဆင်ရန်', style: const TextStyle(fontSize: 18)),
-          actions: [ if (_isSaving) const Padding(padding: EdgeInsets.all(16.0), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))) ],
+          actions: [ 
+            if (_isSaving) 
+              const Padding(
+                padding: EdgeInsets.all(16.0), 
+                child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+              ) 
+          ],
         ),
         body: Form(
           key: _formKey,
@@ -235,9 +238,22 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
               const SizedBox(height: 16),
               Row(
                 children: [
-                  Expanded(child: TextFormField(controller: _askingPriceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'ခေါ်ဈေး (သိန်း) *', border: OutlineInputBorder()), validator: (v) => v == null || v.isEmpty ? 'ဈေးနှုန်း ထည့်ပါ' : null)),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _askingPriceController, 
+                      keyboardType: TextInputType.number, 
+                      decoration: const InputDecoration(labelText: 'ခေါ်ဈေး (သိန်း) *', border: OutlineInputBorder()), 
+                      validator: (v) => v == null || v.isEmpty ? 'ဈေးနှုန်း ထည့်ပါ' : null
+                    )
+                  ),
                   const SizedBox(width: 16),
-                  Expanded(child: TextFormField(controller: _bottomPriceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'အောက်ဆုံးဈေး (သိန်း)', border: OutlineInputBorder()))),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _bottomPriceController, 
+                      keyboardType: TextInputType.number, 
+                      decoration: const InputDecoration(labelText: 'အောက်ဆုံးဈေး (သိန်း)', border: OutlineInputBorder())
+                    )
+                  ),
                 ],
               ),
               const SizedBox(height: 16),
@@ -278,7 +294,6 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
               const Text('ပိုင်ရှင်အချက်အလက်', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
               const SizedBox(height: 8),
               
-              // ⚠️ စာရိုက်၍ရှာနိုင်၊ အသစ်ရိုက်ထည့်လျှင် Add ခလုတ်ပေါ်သော Owner Autocomplete 
               Autocomplete<Map<String, dynamic>>(
                 displayStringForOption: (option) => option['name'],
                 optionsBuilder: (TextEditingValue textEditingValue) {
@@ -287,7 +302,6 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
                     return (owner['name'] as String).toLowerCase().contains(query);
                   }).toList();
 
-                  // စာလုံးရိုက်လိုက်တိုင်း "အသစ်ထည့်မည်" ခလုတ်ကို အောက်ဆုံးတွင် အမြဲပြပေးမည်
                   if (query.isNotEmpty) {
                     matches.add({
                       'id': '__ADD_NEW__',
@@ -299,14 +313,13 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
                 },
                 onSelected: (Map<String, dynamic> selection) async {
                   if (selection['id'] == '__ADD_NEW__') {
-                    // "အသစ်ထည့်မည်" ကိုနှိပ်လျှင် ရိုက်လက်စ နာမည်ကို initialName အဖြစ် သယ်သွားမည်
                     final result = await Navigator.push(
                       context,
                       MaterialPageRoute(builder: (_) => OwnerFormScreen(initialName: selection['raw_name']))
                     );
                     if (result == true) {
                       await _loadOwners();
-                      _ownerSearchController.clear(); // နာမည်အသစ်ကို ပြန်ရွေးနိုင်ရန် အကွက်ကို ရှင်းပေးမည်
+                      _ownerSearchController.clear();
                       setState(() => _ownerId = null);
                     }
                   } else {
@@ -318,7 +331,6 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
                   }
                 },
                 fieldViewBuilder: (context, controller, focusNode, onEditingComplete) {
-                  // Edit data ပါလာလျှင် controller ထဲသို့ စာသားထည့်ပေးမည်
                   if (_ownerSearchController.text.isNotEmpty && controller.text.isEmpty) {
                     controller.text = _ownerSearchController.text;
                   }
@@ -391,9 +403,18 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
                   height: 80,
                   width: double.infinity,
                   decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(8)),
-                  child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.add_a_photo, color: Colors.grey), SizedBox(height: 4), Text('ဓာတ်ပုံများ ထည့်ရန်', style: TextStyle(color: Colors.grey))]),
+                  child: const Column(
+                    mainAxisAlignment: MainAxisAlignment.center, 
+                    children: [
+                      Icon(Icons.add_a_photo, color: Colors.grey), 
+                      SizedBox(height: 4), 
+                      Text('ဓာတ်ပုံများ ထည့်ရန်', style: TextStyle(color: Colors.grey))
+                    ]
+                  ),
                 ),
               ),
+              
+              // ⚠️ ဤနေရာမှစ၍ ကွင်းအဖွင့်အပိတ် (Brackets) များကို သေချာခွဲထုတ်ရေးသားထားပါသည်
               if (_photoPaths.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 SizedBox(
@@ -401,11 +422,24 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBin
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
                     itemCount: _photoPaths.length,
-                    itemBuilder: (context, index) => Stack(
-                      children: [
-                        // 4. Memory Efficiency: cacheWidth ကို အသုံးပြုထားသည်
-                        Container(margin: const EdgeInsets.only(right: 8), width: 100, height: 100, decoration: BoxDecoration(borderRadius: BorderRadius.circular(8)), child: ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.file(File(_photoPaths[index]), fit: BoxFit.cover, cacheWidth: 300))),
-                        Positioned(top: 4, right: 12, child: InkWell(onTap: () => setState(() => _photoPaths.removeAt(index)), child: Container(padding: const EdgeInsets.all(2), decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle), child: const Icon(Icons.close, color: Colors.white, size: 16)))),
-                      ],
-                    ),
-                  )
+                    itemBuilder: (context, index) {
+                      return Stack(
+                        children: [
+                          Container(
+                            margin: const EdgeInsets.only(right: 8),
+                            width: 100,
+                            height: 100,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.file(
+                                File(_photoPaths[index]),
+                                fit: BoxFit.cover,
+                                cacheWidth: 300,
+                              ),
+                            ),
+                          ),
+                          Positioned(
+          
