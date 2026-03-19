@@ -30,8 +30,7 @@ void main() async {
   else if (themeStr == 'dark') themeNotifier.value = ThemeMode.dark;
   else themeNotifier.value = ThemeMode.system;
 
-  // ⚠️ Android တွင် App Switch လုပ်လျှင် Keyboard ပျောက်သော ပြဿနာကို ဖြေရှင်းရန် 
-  // Standard UI Mode အဖြစ် အသေသတ်မှတ်ပေးလိုက်ပါသည်
+  // App Switch လုပ်လျှင် Keyboard ပျောက်သော ပြဿနာကို ဖြေရှင်းရန်
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
 
   runApp(const RealEstateCrmApp());
@@ -141,81 +140,91 @@ class _MainDashboardState extends State<MainDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: false, 
-      onPopInvoked: (didPop) { 
-        if (didPop) return; 
-        if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) { Navigator.of(context).pop(); } 
-        else if (_isSearching) { setState(() { _isSearching = false; _searchQuery = ''; _searchController.clear(); }); } 
-        else if (_currentIndex != 0) { _pageController.animateToPage(0, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut); } 
-        else { SystemNavigator.pop(); } 
-      },
-      child: Scaffold(
-        key: _scaffoldKey,
-        appBar: AppBar(
-          automaticallyImplyLeading: false, 
-          title: _isSearching && _currentIndex == 1 
-              ? TextField(controller: _searchController, autofocus: true, decoration: const InputDecoration(hintText: 'ရှာဖွေရန်...', border: InputBorder.none), onChanged: (val) => setState(() => _searchQuery = val))
-              : const Text('CRM Dashboard', style: TextStyle(fontWeight: FontWeight.bold)), 
-          actions: [ if (_currentIndex == 1) IconButton(icon: Icon(_isSearching ? Icons.close : Icons.search), onPressed: () { setState(() { _isSearching = !_isSearching; if (!_isSearching) { _searchQuery = ''; _searchController.clear(); } }); }) ]
-        ),
-        endDrawer: Drawer(
-          child: ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              const DrawerHeader(
-                decoration: BoxDecoration(color: Color(0xFF008080)), 
-                child: Text('CRM Options', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold))
-              ),
-              ListTile(
-                leading: const Icon(Icons.people), 
-                title: const Text('Owner List'), 
-                onTap: () async { 
-                  Navigator.pop(context); 
-                  await Navigator.push(context, MaterialPageRoute(builder: (context) => const OwnerListScreen())); 
-                  _triggerAutoSync(); 
-                }
-              ),
-              ListTile(
-                leading: const Icon(Icons.delete_outline, color: Colors.red), 
-                title: const Text('Recycle Bin'), 
-                onTap: () async { 
-                  Navigator.pop(context); 
-                  await Navigator.push(context, MaterialPageRoute(builder: (context) => const RecycleBinScreen())); 
-                  _loadProperties(); _loadBuyers(); 
-                }
-              ),
-              const Divider(),
-              ListTile(
-                leading: const Icon(Icons.settings), 
-                title: const Text('Settings'), 
-                onTap: () async { 
-                  Navigator.pop(context); 
-                  await Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())); 
-                  _loadProperties(); _loadBuyers(); 
-                }
-              ),
-            ],
+    // ⚠️ Global Keyboard Fix 
+    return GestureDetector(
+      onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+      child: PopScope(
+        canPop: false, 
+        onPopInvoked: (didPop) { 
+          if (didPop) return; 
+          if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) { Navigator.of(context).pop(); } 
+          else if (_isSearching) { setState(() { _isSearching = false; _searchQuery = ''; _searchController.clear(); }); } 
+          else if (_currentIndex != 0) { _pageController.animateToPage(0, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut); } 
+          else { SystemNavigator.pop(); } 
+        },
+        child: Scaffold(
+          key: _scaffoldKey,
+          appBar: AppBar(
+            automaticallyImplyLeading: false, 
+            title: _isSearching && _currentIndex == 1 
+                ? TextField(controller: _searchController, autofocus: true, decoration: const InputDecoration(hintText: 'ရှာဖွေရန်...', border: InputBorder.none), onChanged: (val) => setState(() => _searchQuery = val))
+                : const Text('CRM Dashboard', style: TextStyle(fontWeight: FontWeight.bold)), 
+            actions: [ if (_currentIndex == 1) IconButton(icon: Icon(_isSearching ? Icons.close : Icons.search), onPressed: () { setState(() { _isSearching = !_isSearching; if (!_isSearching) { _searchQuery = ''; _searchController.clear(); } }); }) ]
           ),
-        ),
-        body: PageView(controller: _pageController, onPageChanged: (index) { setState(() { _currentIndex = index; if (index == 0) { _isSearching = false; _searchQuery = ''; _searchController.clear(); } }); }, children: [ _buildHomeTab(), _buildBuyerTab() ]),
-        floatingActionButton: FloatingActionButton(
-          backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Theme.of(context).colorScheme.onPrimary, 
-          onPressed: () async { 
-            if (_currentIndex == 0) { 
-              final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const PropertyFormScreen())); 
-              if (result == true) { _loadProperties(); _triggerAutoSync(); } 
-            } else if (_currentIndex == 1) { 
-              final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const BuyerFormScreen())); 
-              if (result == true) { _loadBuyers(); _triggerAutoSync(); } 
-            } 
-          }, 
-          child: const Icon(Icons.add)
-        ),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: _currentIndex == 2 ? 0 : _currentIndex, 
-          onDestinationSelected: (index) { if (index == 2) { _scaffoldKey.currentState?.openEndDrawer(); } else { _pageController.animateToPage(index, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut); } },
-          destinations: const [NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'), NavigationDestination(icon: Icon(Icons.person_search_outlined), selectedIcon: Icon(Icons.person_search), label: 'Buyer'), NavigationDestination(icon: Icon(Icons.menu), label: 'Option')],
+          endDrawer: Drawer(
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                const DrawerHeader(
+                  decoration: BoxDecoration(color: Color(0xFF008080)), 
+                  child: Text('CRM Options', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold))
+                ),
+                ListTile(
+                  leading: const Icon(Icons.people), 
+                  title: const Text('Owner List'), 
+                  onTap: () async { 
+                    Navigator.pop(context); 
+                    await Navigator.push(context, MaterialPageRoute(builder: (context) => const OwnerListScreen())); 
+                    _triggerAutoSync(); 
+                  }
+                ),
+                ListTile(
+                  leading: const Icon(Icons.delete_outline, color: Colors.red), 
+                  title: const Text('Recycle Bin'), 
+                  onTap: () async { 
+                    Navigator.pop(context); 
+                    await Navigator.push(context, MaterialPageRoute(builder: (context) => const RecycleBinScreen())); 
+                    _loadProperties(); _loadBuyers(); 
+                  }
+                ),
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.settings), 
+                  title: const Text('Settings'), 
+                  onTap: () async { 
+                    Navigator.pop(context); 
+                    await Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())); 
+                    _loadProperties(); _loadBuyers(); 
+                  }
+                ),
+              ],
+            ),
+          ),
+          // ⚠️ BouncingScrollPhysics သုံးထား၍ Animation ပိုမို Smooth ဖြစ်စေသည်
+          body: PageView(
+            controller: _pageController, 
+            physics: const BouncingScrollPhysics(),
+            onPageChanged: (index) { setState(() { _currentIndex = index; if (index == 0) { _isSearching = false; _searchQuery = ''; _searchController.clear(); } }); }, 
+            children: [ _buildHomeTab(), _buildBuyerTab() ]
+          ),
+          floatingActionButton: FloatingActionButton(
+            backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Theme.of(context).colorScheme.onPrimary, 
+            onPressed: () async { 
+              if (_currentIndex == 0) { 
+                final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const PropertyFormScreen())); 
+                if (result == true) { _loadProperties(); _triggerAutoSync(); } 
+              } else if (_currentIndex == 1) { 
+                final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const BuyerFormScreen())); 
+                if (result == true) { _loadBuyers(); _triggerAutoSync(); } 
+              } 
+            }, 
+            child: const Icon(Icons.add)
+          ),
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: _currentIndex == 2 ? 0 : _currentIndex, 
+            onDestinationSelected: (index) { if (index == 2) { _scaffoldKey.currentState?.openEndDrawer(); } else { _pageController.animateToPage(index, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut); } },
+            destinations: const [NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'), NavigationDestination(icon: Icon(Icons.person_search_outlined), selectedIcon: Icon(Icons.person_search), label: 'Buyer'), NavigationDestination(icon: Icon(Icons.menu), label: 'Option')],
+          ),
         ),
       ),
     );
@@ -243,7 +252,6 @@ class _MainDashboardState extends State<MainDashboard> {
           value: _selectedFilterCategory, 
           icon: const Icon(Icons.filter_list, size: 20), 
           items: _filterCategories.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value, style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis))).toList(), 
-          // ⚠️ Dashboard Filter တွင် အမှန်တကယ် သုံးထားသော စာရင်းကိုသာ ခေါ်မည်
           onChanged: (v) async {
             setState(() { _selectedFilterCategory = v; _selectedFilterValue = null; _currentSubFilterValues = []; _priceFilterController.clear(); });
             if (v == 'status') {
@@ -264,17 +272,22 @@ class _MainDashboardState extends State<MainDashboard> {
         Expanded(flex: 5, child: _selectedFilterCategory == 'asking_price_lakhs' ? TextField(controller: _priceFilterController, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText: 'အများဆုံး (သိန်း)', border: InputBorder.none, isDense: true), onChanged: (_) => setState(() {})) : DropdownButtonHideUnderline(child: DropdownButton<String>(isExpanded: true, hint: const Text('ရွေးချယ်ရန်'), value: _selectedFilterValue, items: _currentSubFilterValues.map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis))).toList(), onChanged: (val) => setState(() => _selectedFilterValue = val)))),
         if (_selectedFilterCategory != null) IconButton(icon: const Icon(Icons.cancel, color: Colors.grey, size: 20), onPressed: () => setState(() { _selectedFilterCategory = null; _selectedFilterValue = null; _currentSubFilterValues = []; _priceFilterController.clear(); }))
       ])),
-      Expanded(child: filteredProperties.isEmpty ? const Center(child: Text('စာရင်းမရှိပါ')) : ListView.builder(padding: const EdgeInsets.only(top: 8, bottom: 80), itemCount: filteredProperties.length, itemBuilder: (context, index) => PropertyMiniCard(
-        property: filteredProperties[index], 
-        isSynced: filteredProperties[index]['is_synced'] == 1, 
-        onDelete: () async {
-          final id = filteredProperties[index]['id'];
-          setState(() => _properties.removeWhere((p) => p['id'] == id));
-          await DatabaseHelper.instance.moveToRecycleBin('crm_properties', id);
-          _showAutoCloseSnackBar('ဖျက်ပြီးပါပြီ', () async { await DatabaseHelper.instance.restoreFromRecycleBin('crm_properties', id); _loadProperties(); });
-        }, 
-        onEditCompleted: () { _loadProperties(); _triggerAutoSync(); } 
-      )))
+      Expanded(child: filteredProperties.isEmpty ? const Center(child: Text('စာရင်းမရှိပါ')) : ListView.builder(
+        padding: const EdgeInsets.only(top: 8, bottom: 80), 
+        physics: const BouncingScrollPhysics(), // Scroll အိအိလေး ဖြစ်စေရန်
+        itemCount: filteredProperties.length, 
+        itemBuilder: (context, index) => PropertyMiniCard(
+          property: filteredProperties[index], 
+          isSynced: filteredProperties[index]['is_synced'] == 1, 
+          onDelete: () async {
+            final id = filteredProperties[index]['id'];
+            setState(() => _properties.removeWhere((p) => p['id'] == id));
+            await DatabaseHelper.instance.moveToRecycleBin('crm_properties', id);
+            _showAutoCloseSnackBar('ဖျက်ပြီးပါပြီ', () async { await DatabaseHelper.instance.restoreFromRecycleBin('crm_properties', id); _loadProperties(); });
+          }, 
+          onEditCompleted: () { _loadProperties(); _triggerAutoSync(); } 
+        )
+      ))
     ]);
   }
 
@@ -287,19 +300,24 @@ class _MainDashboardState extends State<MainDashboard> {
       return matchText;
     }).toList();
     if (filteredBuyers.isEmpty) return const Center(child: Text('ဝယ်လက်မတွေ့ပါ'));
-    return ListView.builder(padding: const EdgeInsets.only(top: 8, bottom: 80), itemCount: filteredBuyers.length, itemBuilder: (context, index) {
-      final buyer = filteredBuyers[index];
-      List<dynamic> phones = []; try { phones = jsonDecode(buyer['phones'] ?? '[]'); } catch (_) {}
-      return Card(margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Expanded(child: Text(buyer['name'] ?? 'အမည်မသိ', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))), Text(TimeHelper.getRelativeTime(buyer['updated_at']), style: const TextStyle(fontSize: 11, color: Colors.grey)), IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20), onPressed: () {
-          setState(() => _buyers.removeWhere((b) => b['id'] == buyer['id']));
-          DatabaseHelper.instance.moveToRecycleBin('crm_buyers', buyer['id']);
-          _showAutoCloseSnackBar('ဖျက်ပြီးပါပြီ', () async { await DatabaseHelper.instance.restoreFromRecycleBin('crm_buyers', buyer['id']); _loadBuyers(); });
-        })]),
-        Text('${buyer['budget_lakhs']} သိန်း • ${buyer['preferred_location']}', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
-        if (phones.isNotEmpty) InkWell(onTap: () => launchUrl(Uri.parse('tel:${phones.first}')), child: Text(phones.join(', '), style: const TextStyle(color: Colors.blue, decoration: TextDecoration.underline))),
-        Align(alignment: Alignment.centerRight, child: OutlinedButton(onPressed: () async { final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => BuyerFormScreen(editData: buyer))); if (result == true) { _loadBuyers(); _triggerAutoSync(); } }, child: const Text('Edit')))
-      ])));
-    });
+    return ListView.builder(
+      padding: const EdgeInsets.only(top: 8, bottom: 80), 
+      physics: const BouncingScrollPhysics(), // Scroll အိအိလေး ဖြစ်စေရန်
+      itemCount: filteredBuyers.length, 
+      itemBuilder: (context, index) {
+        final buyer = filteredBuyers[index];
+        List<dynamic> phones = []; try { phones = jsonDecode(buyer['phones'] ?? '[]'); } catch (_) {}
+        return Card(margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Expanded(child: Text(buyer['name'] ?? 'အမည်မသိ', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))), Text(TimeHelper.getRelativeTime(buyer['updated_at']), style: const TextStyle(fontSize: 11, color: Colors.grey)), IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20), onPressed: () {
+            setState(() => _buyers.removeWhere((b) => b['id'] == buyer['id']));
+            DatabaseHelper.instance.moveToRecycleBin('crm_buyers', buyer['id']);
+            _showAutoCloseSnackBar('ဖျက်ပြီးပါပြီ', () async { await DatabaseHelper.instance.restoreFromRecycleBin('crm_buyers', buyer['id']); _loadBuyers(); });
+          })]),
+          Text('${buyer['budget_lakhs']} သိန်း • ${buyer['preferred_location']}', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
+          if (phones.isNotEmpty) InkWell(onTap: () => launchUrl(Uri.parse('tel:${phones.first}')), child: Text(phones.join(', '), style: const TextStyle(color: Colors.blue, decoration: TextDecoration.underline))),
+          Align(alignment: Alignment.centerRight, child: OutlinedButton(onPressed: () async { final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => BuyerFormScreen(editData: buyer))); if (result == true) { _loadBuyers(); _triggerAutoSync(); } }, child: const Text('Edit')))
+        ])));
+      }
+    );
   }
 }
