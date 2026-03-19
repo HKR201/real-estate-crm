@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; 
 import 'dart:convert'; 
+import 'dart:io'; // Internet check အတွက်
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart'; 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -30,8 +31,12 @@ void main() async {
   else if (themeStr == 'dark') themeNotifier.value = ThemeMode.dark;
   else themeNotifier.value = ThemeMode.system;
 
-  // App Switch လုပ်လျှင် Keyboard ပျောက်သော ပြဿနာကို ဖြေရှင်းရန်
-  SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
+  // 2. Android 15 Modernization (Edge-to-Edge and transparent bars)
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    systemNavigationBarColor: Colors.transparent,
+  ));
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
   runApp(const RealEstateCrmApp());
 }
@@ -77,14 +82,14 @@ class _MainDashboardState extends State<MainDashboard> {
   int _currentIndex = 0;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>(); 
   final PageController _pageController = PageController(); 
+  final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _priceFilterController = TextEditingController();
 
   List<Map<String, dynamic>> _properties = [];
   List<Map<String, dynamic>> _buyers = [];
   bool _isLoading = true; 
   bool _isLoadingBuyers = true;
-
   bool _isSearching = false;
-  final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
   final Map<String, String> _filterCategories = {
@@ -98,7 +103,6 @@ class _MainDashboardState extends State<MainDashboard> {
   String? _selectedFilterCategory;
   String? _selectedFilterValue;
   List<String> _currentSubFilterValues = [];
-  final TextEditingController _priceFilterController = TextEditingController();
 
   @override
   void initState() { 
@@ -108,9 +112,34 @@ class _MainDashboardState extends State<MainDashboard> {
     _triggerAutoSync(); 
   }
 
+  // 1. Memory Management (Critical)
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _priceFilterController.dispose();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  // 3. Sync Logic Efficiency (Internet Check + 5-minute Cooldown)
   Future<void> _triggerAutoSync() async {
-    await SyncService.autoSyncBackground();
-    if (mounted) { _loadProperties(); _loadBuyers(); }
+    try {
+      final result = await InternetAddress.lookup('supabase.co');
+      if (result.isNotEmpty && result[0].rawAddress.isNotEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        final lastSyncStr = prefs.getString('last_auto_sync');
+        DateTime? lastSync = lastSyncStr != null ? DateTime.tryParse(lastSyncStr) : null;
+        
+        // ၅ မိနစ်ကျော်မှသာ Sync ထပ်လုပ်မည်
+        if (lastSync == null || DateTime.now().difference(lastSync).inMinutes >= 5) {
+          await SyncService.autoSyncBackground();
+          await prefs.setString('last_auto_sync', DateTime.now().toIso8601String());
+          if (mounted) { _loadProperties(); _loadBuyers(); }
+        }
+      }
+    } catch (e) {
+      debugPrint("No Internet or Sync Failed: ${e.toString()}");
+    }
   }
 
   Future<void> _loadProperties() async {
@@ -140,7 +169,6 @@ class _MainDashboardState extends State<MainDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    // ⚠️ Global Keyboard Fix 
     return GestureDetector(
       onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
       child: PopScope(
@@ -162,45 +190,22 @@ class _MainDashboardState extends State<MainDashboard> {
             actions: [ if (_currentIndex == 1) IconButton(icon: Icon(_isSearching ? Icons.close : Icons.search), onPressed: () { setState(() { _isSearching = !_isSearching; if (!_isSearching) { _searchQuery = ''; _searchController.clear(); } }); }) ]
           ),
           endDrawer: Drawer(
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                const DrawerHeader(
-                  decoration: BoxDecoration(color: Color(0xFF008080)), 
-                  child: Text('CRM Options', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold))
-                ),
-                ListTile(
-                  leading: const Icon(Icons.people), 
-                  title: const Text('Owner List'), 
-                  onTap: () async { 
-                    Navigator.pop(context); 
-                    await Navigator.push(context, MaterialPageRoute(builder: (context) => const OwnerListScreen())); 
-                    _triggerAutoSync(); 
-                  }
-                ),
-                ListTile(
-                  leading: const Icon(Icons.delete_outline, color: Colors.red), 
-                  title: const Text('Recycle Bin'), 
-                  onTap: () async { 
-                    Navigator.pop(context); 
-                    await Navigator.push(context, MaterialPageRoute(builder: (context) => const RecycleBinScreen())); 
-                    _loadProperties(); _loadBuyers(); 
-                  }
-                ),
-                const Divider(),
-                ListTile(
-                  leading: const Icon(Icons.settings), 
-                  title: const Text('Settings'), 
-                  onTap: () async { 
-                    Navigator.pop(context); 
-                    await Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())); 
-                    _loadProperties(); _loadBuyers(); 
-                  }
-                ),
-              ],
+            child: SafeArea(
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: [
+                  const DrawerHeader(
+                    decoration: BoxDecoration(color: Color(0xFF008080)), 
+                    child: Text('CRM Options', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold))
+                  ),
+                  ListTile(leading: const Icon(Icons.people), title: const Text('Owner List'), onTap: () async { Navigator.pop(context); await Navigator.push(context, MaterialPageRoute(builder: (context) => const OwnerListScreen())); _triggerAutoSync(); }),
+                  ListTile(leading: const Icon(Icons.delete_outline, color: Colors.red), title: const Text('Recycle Bin'), onTap: () async { Navigator.pop(context); await Navigator.push(context, MaterialPageRoute(builder: (context) => const RecycleBinScreen())); _loadProperties(); _loadBuyers(); }),
+                  const Divider(),
+                  ListTile(leading: const Icon(Icons.settings), title: const Text('Settings'), onTap: () async { Navigator.pop(context); await Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())); _loadProperties(); _loadBuyers(); }),
+                ],
+              ),
             ),
           ),
-          // ⚠️ BouncingScrollPhysics သုံးထား၍ Animation ပိုမို Smooth ဖြစ်စေသည်
           body: PageView(
             controller: _pageController, 
             physics: const BouncingScrollPhysics(),
@@ -254,17 +259,8 @@ class _MainDashboardState extends State<MainDashboard> {
           items: _filterCategories.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value, style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis))).toList(), 
           onChanged: (v) async {
             setState(() { _selectedFilterCategory = v; _selectedFilterValue = null; _currentSubFilterValues = []; _priceFilterController.clear(); });
-            if (v == 'status') {
-              _currentSubFilterValues = ['Available', 'Pending', 'Sold Out'];
-            } else if (v == 'location_id') {
-              _currentSubFilterValues = await DatabaseHelper.instance.getDistinctPropertyValues('location_id');
-            } else if (v == 'road_type') {
-              _currentSubFilterValues = await DatabaseHelper.instance.getDistinctPropertyValues('road_type');
-            } else if (v == 'house_type') {
-              _currentSubFilterValues = await DatabaseHelper.instance.getDistinctPropertyValues('house_type');
-            } else if (v == 'land_type') {
-              _currentSubFilterValues = await DatabaseHelper.instance.getDistinctPropertyValues('land_type');
-            }
+            if (v == 'status') { _currentSubFilterValues = ['Available', 'Pending', 'Sold Out']; } 
+            else if (v != null && v != 'asking_price_lakhs') { _currentSubFilterValues = await DatabaseHelper.instance.getDistinctPropertyValues(v); }
             setState(() {});
           }
         ))),
@@ -274,7 +270,7 @@ class _MainDashboardState extends State<MainDashboard> {
       ])),
       Expanded(child: filteredProperties.isEmpty ? const Center(child: Text('စာရင်းမရှိပါ')) : ListView.builder(
         padding: const EdgeInsets.only(top: 8, bottom: 80), 
-        physics: const BouncingScrollPhysics(), // Scroll အိအိလေး ဖြစ်စေရန်
+        physics: const BouncingScrollPhysics(),
         itemCount: filteredProperties.length, 
         itemBuilder: (context, index) => PropertyMiniCard(
           property: filteredProperties[index], 
@@ -302,7 +298,7 @@ class _MainDashboardState extends State<MainDashboard> {
     if (filteredBuyers.isEmpty) return const Center(child: Text('ဝယ်လက်မတွေ့ပါ'));
     return ListView.builder(
       padding: const EdgeInsets.only(top: 8, bottom: 80), 
-      physics: const BouncingScrollPhysics(), // Scroll အိအိလေး ဖြစ်စေရန်
+      physics: const BouncingScrollPhysics(),
       itemCount: filteredBuyers.length, 
       itemBuilder: (context, index) {
         final buyer = filteredBuyers[index];
