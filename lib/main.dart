@@ -14,8 +14,8 @@ import 'screens/settings_screen.dart';
 import 'db/database_helper.dart';
 import 'utils/time_helper.dart'; 
 
-const String supabaseUrl = 'YOUR_SUPABASE_URL';
-const String supabaseAnonKey = 'YOUR_SUPABASE_ANON_KEY';
+const String supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+const String supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
 
 // Theme ပြောင်းလဲမှုကို နားထောင်ရန် ValueNotifier
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.system);
