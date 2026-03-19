@@ -3,9 +3,9 @@ import '../db/database_helper.dart';
 
 class DynamicDropdown extends StatefulWidget {
   final String label;
-  final String category; // ဥပမာ - 'road_type', 'land_type', 'location'
+  final String category;
   final String? selectedValue;
-  final ValueChanged<String?> onChanged;
+  final Function(String?) onChanged;
 
   const DynamicDropdown({
     super.key,
@@ -20,146 +20,127 @@ class DynamicDropdown extends StatefulWidget {
 }
 
 class _DynamicDropdownState extends State<DynamicDropdown> {
-  // Dropdown ကိုနှိပ်လျှင် အောက်မှ BottomSheet တက်လာစေရန်
-  void _showSelectionSheet(BuildContext context) async {
-    // Database ထဲမှ ရှိပြီးသား စာရင်းများကို ဆွဲထုတ်မည်
-    List<String> items = await DatabaseHelper.instance.getMetadata(widget.category);
-
-    if (!context.mounted) return;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true, // Keyboard တက်လာလျှင် အပေါ်သို့ လိုက်တက်ရန်
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (context) {
-        return _DropdownSheet(
-          category: widget.category,
-          label: widget.label,
-          initialItems: items,
-          onItemSelected: (value) {
-            widget.onChanged(value);
-            Navigator.pop(context); // ရွေးပြီးသည်နှင့် ပိတ်မည်
-          },
-        );
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // အပြင်ပန်းကြည့်လျှင် ရိုးရိုး Text Input ပုံစံရှိနေမည်
-    return InkWell(
-      onTap: () => _showSelectionSheet(context),
-      child: InputDecorator(
-        decoration: InputDecoration(
-          labelText: widget.label,
-          suffixIcon: const Icon(Icons.arrow_drop_down),
-        ),
-        child: Text(
-          widget.selectedValue ?? 'ရွေးချယ်ပါ',
-          style: TextStyle(color: widget.selectedValue == null ? Colors.grey : Theme.of(context).colorScheme.onSurface, fontSize: 16),
-        ),
-      ),
-    );
-  }
-}
-
-// Bottom Sheet အတွင်းရှိ Search နှင့် Add New လုပ်ဆောင်ချက်များ
-class _DropdownSheet extends StatefulWidget {
-  final String category;
-  final String label;
-  final List<String> initialItems;
-  final ValueChanged<String> onItemSelected;
-
-  const _DropdownSheet({
-    required this.category,
-    required this.label,
-    required this.initialItems,
-    required this.onItemSelected,
-  });
-
-  @override
-  State<_DropdownSheet> createState() => _DropdownSheetState();
-}
-
-class _DropdownSheetState extends State<_DropdownSheet> {
-  late List<String> items;
-  final TextEditingController _searchController = TextEditingController();
+  List<String> _items = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    items = widget.initialItems;
+    _loadItems();
   }
 
-  // စာသားအသစ်ကို Database သို့ လှမ်းသိမ်းမည်
-  void _addNewItem() async {
-    final newValue = _searchController.text.trim();
-    if (newValue.isNotEmpty && !items.contains(newValue)) {
-      await DatabaseHelper.instance.insertMetadata(widget.category, newValue);
-      widget.onItemSelected(newValue); // သိမ်းပြီးသည်နှင့် ရွေးချယ်ပြီးသားဖြစ်သွားမည်
+  Future<void> _loadItems() async {
+    setState(() => _isLoading = true);
+    
+    // ၁။ ကိုယ်တိုင် မှတ်ထားသော (Metadata) စာရင်းများကို ဆွဲယူမည်
+    List<String> metaItems = await DatabaseHelper.instance.getMetadata(widget.category);
+    
+    // ၂။ Cloud မှ ပြန်လည်ပါလာသော အိမ်ခြံမြေများထဲမှ နာမည်များကိုပါ အလိုလို ဆွဲထုတ်မည်
+    String columnName = '';
+    if (widget.category == 'location') columnName = 'location_id';
+    else if (widget.category == 'house_type') columnName = 'house_type';
+    else if (widget.category == 'road_type') columnName = 'road_type';
+    else if (widget.category == 'land_type') columnName = 'land_type';
+
+    List<String> distinctItems = [];
+    if (columnName.isNotEmpty) {
+      distinctItems = await DatabaseHelper.instance.getDistinctPropertyValues(columnName);
     }
+
+    // ၃။ စာရင်းနှစ်ခုကို ပေါင်းပြီး ထပ်နေတာတွေ (Duplicate) ကို အလိုလို ဖယ်ရှားမည်
+    Set<String> combined = {...metaItems, ...distinctItems};
+    
+    // ၄။ ရွေးချယ်ထားသော တန်ဖိုးက စာရင်းထဲမရှိရင် (ဥပမာ - Database Error ကြောင့်) ထည့်ပေးမည်
+    if (widget.selectedValue != null && widget.selectedValue!.isNotEmpty) {
+      combined.add(widget.selectedValue!);
+    }
+
+    List<String> finalList = combined.toList().where((e) => e.isNotEmpty).toList();
+    finalList.sort(); // အက္ခရာစဉ်အတိုင်း ပြန်စီမည်
+
+    setState(() {
+      _items = finalList;
+      _isLoading = false;
+    });
+  }
+
+  void _addNewItem() {
+    TextEditingController controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('${widget.label} အသစ်ထည့်ရန်'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'စာရိုက်ထည့်ပါ',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('ပယ်ဖျက်မည်')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Colors.white),
+            onPressed: () async {
+              String newVal = controller.text.trim();
+              if (newVal.isNotEmpty) {
+                // အသစ်ကို Database တွင် မှတ်မည်
+                await DatabaseHelper.instance.insertMetadata(widget.category, newVal);
+                Navigator.pop(context, newVal);
+              }
+            },
+            child: const Text('ထည့်မည်'),
+          ),
+        ],
+      ),
+    ).then((newVal) {
+      if (newVal != null) {
+        _loadItems().then((_) {
+          widget.onChanged(newVal as String);
+        });
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    // ရိုက်ရှာထားသော စာသားနှင့် ကိုက်ညီသည်များကို စစ်ထုတ်မည်
-    final filteredItems = items.where((e) => e.toLowerCase().contains(_searchController.text.toLowerCase())).toList();
-    // ရှာလို့မတွေ့မှသာ "အသစ်ထည့်ရန်" ခလုတ် ပေါ်လာစေမည်
-    final bool showAddButton = _searchController.text.isNotEmpty && filteredItems.isEmpty;
+    if (_isLoading) {
+      return Container(
+        height: 55,
+        decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade400), borderRadius: BorderRadius.circular(8)),
+        child: const Center(child: LinearProgressIndicator()),
+      );
+    }
 
-    return Padding(
-      // Keyboard တက်လာပါက ကွယ်မသွားအောင် viewInsets သုံးထားသည်
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, top: 24, left: 16, right: 16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('${widget.label} ရွေးချယ်ရန်', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 16),
-          
-          TextField(
-            controller: _searchController,
-            autofocus: true, // ပွင့်လာသည်နှင့် စာတန်းရိုက်ရန် အသင့်ဖြစ်နေမည်
-            decoration: const InputDecoration(
-              labelText: 'ရှာဖွေရန် (သို့) အသစ်ရိုက်ထည့်ရန်',
-              prefixIcon: Icon(Icons.search),
-            ),
-            onChanged: (v) => setState(() {}),
-          ),
-          const SizedBox(height: 16),
-          
-          if (showAddButton)
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  foregroundColor: Colors.white,
-                ),
-                onPressed: _addNewItem,
-                icon: const Icon(Icons.add),
-                label: Text('"${_searchController.text}" ကို အသစ်ထည့်မည်'),
-              ),
-            ),
-            
-          ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.4),
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: filteredItems.length,
-              itemBuilder: (context, index) {
-                return ListTile(
-                  title: Text(filteredItems[index]),
-                  trailing: const Icon(Icons.check_circle_outline, color: Colors.grey, size: 20),
-                  onTap: () => widget.onItemSelected(filteredItems[index]),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 16),
-        ],
+    return DropdownButtonFormField<String>(
+      decoration: InputDecoration(
+        labelText: widget.label,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
       ),
+      isExpanded: true,
+      value: (_items.contains(widget.selectedValue)) ? widget.selectedValue : null,
+      items: [
+        ..._items.map((e) => DropdownMenuItem(value: e, child: Text(e, overflow: TextOverflow.ellipsis))),
+        // Prefix အစား အောက်ဆုံးတွင် "အသစ်ထည့်မည်" ခလုတ်ကိုသာ ပြမည်
+        const DropdownMenuItem(
+          value: '__ADD_NEW__',
+          child: Row(
+            children: [
+              Icon(Icons.add_circle_outline, color: Colors.blue),
+              SizedBox(width: 8),
+              Text('အသစ်ထည့်မည် (+)', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+            ],
+          ),
+        )
+      ],
+      onChanged: (val) {
+        if (val == '__ADD_NEW__') {
+          _addNewItem();
+        } else {
+          widget.onChanged(val);
+        }
+      },
     );
   }
 }
