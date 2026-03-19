@@ -118,7 +118,7 @@ class DatabaseHelper {
     await batch.commit(noResult: true);
   }
 
-  // Common CRUD
+  // ================= READ (အချက်အလက်များ ဆွဲထုတ်ခြင်း) =================
   Future<List<Map<String, dynamic>>> getAllProperties() async {
     final db = await instance.database;
     return await db.query('crm_properties', where: 'is_deleted = ?', whereArgs: [0], orderBy: 'updated_at DESC');
@@ -134,18 +134,46 @@ class DatabaseHelper {
     return await db.query('crm_buyers', where: 'is_deleted = ?', whereArgs: [0], orderBy: 'updated_at DESC');
   }
 
+  // ================= CREATE & UPDATE (အိမ်ခြံမြေ) =================
   Future<int> insertProperty(Map<String, dynamic> data) async {
     final db = await instance.database;
-    data['is_synced'] = 0; // အသစ်ထည့်လျှင် Cloud မရောက်သေးဟု သတ်မှတ်သည်
+    data['is_synced'] = 0; 
     return await db.insert('crm_properties', data, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<int> updateProperty(Map<String, dynamic> data) async {
     final db = await instance.database;
-    data['is_synced'] = 0; // ပြင်ဆင်လျှင် Cloud ပြန်တင်ရမည်ဟု သတ်မှတ်သည်
+    data['is_synced'] = 0; 
     return await db.update('crm_properties', data, where: 'id = ?', whereArgs: [data['id']]);
   }
 
+  // ================= CREATE & UPDATE (ပိုင်ရှင်) =================
+  Future<int> insertOwner(Map<String, dynamic> data) async {
+    final db = await instance.database;
+    data['is_synced'] = 0; 
+    return await db.insert('crm_owners', data, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<int> updateOwner(Map<String, dynamic> data) async {
+    final db = await instance.database;
+    data['is_synced'] = 0; 
+    return await db.update('crm_owners', data, where: 'id = ?', whereArgs: [data['id']]);
+  }
+
+  // ================= CREATE & UPDATE (ဝယ်လက်) =================
+  Future<int> insertBuyer(Map<String, dynamic> data) async {
+    final db = await instance.database;
+    data['is_synced'] = 0; 
+    return await db.insert('crm_buyers', data, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<int> updateBuyer(Map<String, dynamic> data) async {
+    final db = await instance.database;
+    data['is_synced'] = 0; 
+    return await db.update('crm_buyers', data, where: 'id = ?', whereArgs: [data['id']]);
+  }
+
+  // ================= RECYCLE BIN (အမှိုက်ပုံး) =================
   Future<int> moveToRecycleBin(String table, String id) async {
     final db = await instance.database;
     return await db.update(table, {'is_deleted': 1, 'is_synced': 0}, where: 'id = ?', whereArgs: [id]);
@@ -156,9 +184,24 @@ class DatabaseHelper {
     return await db.update(table, {'is_deleted': 0, 'is_synced': 0}, where: 'id = ?', whereArgs: [id]);
   }
 
+  // ================= METADATA (အမျိုးအစား ခေါင်းစဉ်များ) =================
   Future<List<String>> getMetadata(String category) async {
     final db = await instance.database;
     final result = await db.query('crm_metadata', columns: ['value'], where: 'category = ?', whereArgs: [category]);
     return result.map((e) => e['value'] as String).toList();
+  }
+
+  Future<void> insertMetadata(String category, String value) async {
+    final db = await instance.database;
+    await db.insert(
+      'crm_metadata', 
+      {
+        'id': '${category}_${DateTime.now().millisecondsSinceEpoch}',
+        'category': category, 
+        'value': value, 
+        'created_at': DateTime.now().toIso8601String()
+      },
+      conflictAlgorithm: ConflictAlgorithm.ignore
+    );
   }
 }
