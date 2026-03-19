@@ -7,7 +7,7 @@ import 'dart:io';
 import 'dart:convert';
 import '../db/database_helper.dart';
 import '../widgets/dynamic_dropdown.dart';
-import 'owner_form_screen.dart'; // Owner အသစ်ထည့်ရန်
+import 'owner_form_screen.dart'; 
 
 class PropertyFormScreen extends StatefulWidget {
   final Map<String, dynamic>? editData;
@@ -17,7 +17,7 @@ class PropertyFormScreen extends StatefulWidget {
   State<PropertyFormScreen> createState() => _PropertyFormScreenState();
 }
 
-class _PropertyFormScreenState extends State<PropertyFormScreen> {
+class _PropertyFormScreenState extends State<PropertyFormScreen> with WidgetsBindingObserver {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _askingPriceController = TextEditingController();
@@ -28,9 +28,10 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
   final TextEditingController _northController = TextEditingController();
   final TextEditingController _remarkController = TextEditingController();
   final TextEditingController _mapLinkController = TextEditingController();
+  final TextEditingController _ownerSearchController = TextEditingController(); // Owner Autocomplete အတွက်
 
   String? _status = 'Available';
-  String? _propertyType = 'အိမ်အပါ'; // အသစ်ထပ်တိုးထားသော Logic
+  String? _propertyType = 'အိမ်အပါ'; 
   String? _location;
   String? _roadType;
   String? _houseType;
@@ -44,7 +45,8 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
   @override
   void initState() {
     super.initState();
-    _loadOwners();
+    WidgetsBinding.instance.addObserver(this); // Keyboard bug ကာကွယ်ရန်
+    
     if (widget.editData != null) {
       final d = widget.editData!;
       _titleController.text = d['title'] ?? '';
@@ -66,22 +68,20 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
       if (d['extra_data'] != null) {
         try {
           final extra = jsonDecode(d['extra_data']);
-          if (extra['property_type'] != null) {
-            _propertyType = extra['property_type'];
-          }
-          if (extra['photos'] != null) {
-            _photoPaths = List<String>.from(extra['photos']);
-          }
+          if (extra['property_type'] != null) _propertyType = extra['property_type'];
+          if (extra['photos'] != null) _photoPaths = List<String>.from(extra['photos']);
         } catch (e) {
-          debugPrint("JSON Decode Error: ${e.toString()}");
+          debugPrint(e.toString());
         }
       }
     }
+    _loadOwners();
   }
 
   // 1. Memory Management
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _titleController.dispose();
     _askingPriceController.dispose();
     _bottomPriceController.dispose();
@@ -91,15 +91,33 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
     _northController.dispose();
     _remarkController.dispose();
     _mapLinkController.dispose();
+    _ownerSearchController.dispose();
     super.dispose();
+  }
+
+  // ⚠️ Keyboard Bug အမြစ်ပြတ်ရှင်းလင်းခြင်း (App အဝင်/အထွက်တွင် Focus ဖြုတ်မည်)
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      FocusManager.instance.primaryFocus?.unfocus();
+    }
   }
 
   Future<void> _loadOwners() async {
     try {
       final owners = await DatabaseHelper.instance.getAllOwners();
-      setState(() => _owners = owners);
+      if (mounted) {
+        setState(() {
+          _owners = owners;
+          // Edit လုပ်ချိန်တွင် Owner နာမည်ကို Autocomplete ထဲသို့ ကြိုတင်ဖြည့်ထားမည်
+          if (_ownerId != null && _ownerSearchController.text.isEmpty) {
+            final match = _owners.where((o) => o['id'] == _ownerId).toList();
+            if (match.isNotEmpty) _ownerSearchController.text = match.first['name'];
+          }
+        });
+      }
     } catch (e) {
-      debugPrint("Load Owners Error: ${e.toString()}");
+      debugPrint(e.toString());
     }
   }
 
@@ -124,18 +142,17 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
         }
       }
     } catch (e) {
-      debugPrint("Image Pick Error: ${e.toString()}");
+      debugPrint(e.toString());
     }
   }
 
   void _openGoogleMaps() async {
     String urlStr = _mapLinkController.text.trim();
     if (urlStr.isEmpty) urlStr = 'https://maps.google.com';
-    final Uri url = Uri.parse(urlStr);
     try {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
+      await launchUrl(Uri.parse(urlStr), mode: LaunchMode.externalApplication);
     } catch (e) {
-      debugPrint("Map Launch Error: ${e.toString()}");
+      debugPrint(e.toString());
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('မြေပုံ ဖွင့်၍ မရပါ')));
     }
   }
@@ -158,16 +175,16 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
       'status': _status,
       'location_id': _location,
       'road_type': _roadType,
-      'house_type': _propertyType == 'ခြံသီးသန့်' ? null : _houseType, // ခြံသီးသန့်ဆိုလျှင် အိမ်အမျိုးအစား မသိမ်းပါ
+      'house_type': _propertyType == 'ခြံသီးသန့်' ? null : _houseType, 
       'land_type': _landType,
       'owner_id': _ownerId,
       'is_deleted': 0,
       'is_synced': 0, 
       'extra_data': jsonEncode({
         'photos': _photoPaths,
-        'property_type': _propertyType, // အမျိုးအစားကို သိမ်းဆည်းမည်
+        'property_type': _propertyType, 
       }),
-      'updated_at': DateTime.now().toUtc().toIso8601String(),
+      'updated_at': DateTime.now().toUtc().toIso8601String(), // ⚠️ Last Edit time ကို သိမ်းမည်
     };
 
     try {
@@ -180,7 +197,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
       }
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
-      debugPrint("Save Property Error: ${e.toString()}");
+      debugPrint(e.toString());
       setState(() => _isSaving = false);
     }
   }
@@ -206,19 +223,16 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
                 validator: (v) => v == null || v.isEmpty ? 'ခေါင်းစဉ် ထည့်ပါ' : null,
               ),
               const SizedBox(height: 16),
-              
-              // အမျိုးအစား (အိမ်အပါ / ခြံသီးသန့်) Logic
               DropdownButtonFormField<String>(
                 value: _propertyType,
                 decoration: const InputDecoration(labelText: 'အမျိုးအစား', border: OutlineInputBorder()),
                 items: ['အိမ်အပါ', 'ခြံသီးသန့်'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
                 onChanged: (v) => setState(() {
                   _propertyType = v;
-                  if (v == 'ခြံသီးသန့်') _houseType = null; // ခြံသီးသန့်ရွေးလျှင် အိမ်အမျိုးအစားကို ဖျက်မည်
+                  if (v == 'ခြံသီးသန့်') _houseType = null; 
                 }),
               ),
               const SizedBox(height: 16),
-
               Row(
                 children: [
                   Expanded(child: TextFormField(controller: _askingPriceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'ခေါ်ဈေး (သိန်း) *', border: OutlineInputBorder()), validator: (v) => v == null || v.isEmpty ? 'ဈေးနှုန်း ထည့်ပါ' : null)),
@@ -256,7 +270,6 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
               ),
               const SizedBox(height: 16),
               
-              // ခြံသီးသန့် မဟုတ်မှသာ အိမ်အမျိုးအစားကို ပြမည်
               if (_propertyType != 'ခြံသီးသန့်') ...[
                 DynamicDropdown(label: 'အိမ်အမျိုးအစား', category: 'house_type', selectedValue: _houseType, onChanged: (v) => setState(() => _houseType = v)),
                 const SizedBox(height: 16),
@@ -264,37 +277,103 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
               
               const Text('ပိုင်ရှင်အချက်အလက်', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
               const SizedBox(height: 8),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      value: _ownerId,
-                      decoration: const InputDecoration(labelText: 'ပိုင်ရှင် ရွေးချယ်ပါ', border: OutlineInputBorder()),
-                      items: [
-                        const DropdownMenuItem(value: null, child: Text('မရွေးချယ်ပါ')),
-                        ..._owners.map((o) => DropdownMenuItem(value: o['id'] as String, child: Text(o['name']))).toList()
-                      ],
-                      onChanged: (v) => setState(() => _ownerId = v),
+              
+              // ⚠️ စာရိုက်၍ရှာနိုင်၊ အသစ်ရိုက်ထည့်လျှင် Add ခလုတ်ပေါ်သော Owner Autocomplete 
+              Autocomplete<Map<String, dynamic>>(
+                displayStringForOption: (option) => option['name'],
+                optionsBuilder: (TextEditingValue textEditingValue) {
+                  final query = textEditingValue.text.toLowerCase();
+                  final matches = _owners.where((owner) {
+                    return (owner['name'] as String).toLowerCase().contains(query);
+                  }).toList();
+
+                  // စာလုံးရိုက်လိုက်တိုင်း "အသစ်ထည့်မည်" ခလုတ်ကို အောက်ဆုံးတွင် အမြဲပြပေးမည်
+                  if (query.isNotEmpty) {
+                    matches.add({
+                      'id': '__ADD_NEW__',
+                      'name': '➕ ပိုင်ရှင်အသစ်ထည့်မည်: "${textEditingValue.text}"',
+                      'raw_name': textEditingValue.text
+                    });
+                  }
+                  return matches;
+                },
+                onSelected: (Map<String, dynamic> selection) async {
+                  if (selection['id'] == '__ADD_NEW__') {
+                    // "အသစ်ထည့်မည်" ကိုနှိပ်လျှင် ရိုက်လက်စ နာမည်ကို initialName အဖြစ် သယ်သွားမည်
+                    final result = await Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => OwnerFormScreen(initialName: selection['raw_name']))
+                    );
+                    if (result == true) {
+                      await _loadOwners();
+                      _ownerSearchController.clear(); // နာမည်အသစ်ကို ပြန်ရွေးနိုင်ရန် အကွက်ကို ရှင်းပေးမည်
+                      setState(() => _ownerId = null);
+                    }
+                  } else {
+                    setState(() {
+                      _ownerId = selection['id'];
+                      _ownerSearchController.text = selection['name'];
+                    });
+                    FocusManager.instance.primaryFocus?.unfocus();
+                  }
+                },
+                fieldViewBuilder: (context, controller, focusNode, onEditingComplete) {
+                  // Edit data ပါလာလျှင် controller ထဲသို့ စာသားထည့်ပေးမည်
+                  if (_ownerSearchController.text.isNotEmpty && controller.text.isEmpty) {
+                    controller.text = _ownerSearchController.text;
+                  }
+                  return TextFormField(
+                    controller: controller,
+                    focusNode: focusNode,
+                    decoration: InputDecoration(
+                      labelText: 'ပိုင်ရှင်အမည် ရှာရန် (သို့) အသစ်ရိုက်ထည့်ရန်',
+                      border: const OutlineInputBorder(),
+                      suffixIcon: controller.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () {
+                                controller.clear();
+                                _ownerSearchController.clear();
+                                setState(() => _ownerId = null);
+                              },
+                            )
+                          : null,
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Owner အသစ်ထည့်ရန် ခလုတ်
-                  Container(
-                    height: 55,
-                    decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                    child: IconButton(
-                      icon: Icon(Icons.person_add, color: Theme.of(context).colorScheme.primary),
-                      tooltip: 'ပိုင်ရှင်အသစ်ထည့်မည်',
-                      onPressed: () async {
-                        final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => const OwnerFormScreen()));
-                        if (result == true) _loadOwners(); // အသစ်ထည့်ပြီးလျှင် Data ပြန်ခေါ်မည်
-                      },
+                    onChanged: (val) {
+                       _ownerSearchController.text = val;
+                       if (val.isEmpty) setState(() => _ownerId = null);
+                    },
+                  );
+                },
+                optionsViewBuilder: (context, onSelected, options) {
+                  return Align(
+                    alignment: Alignment.topLeft,
+                    child: Material(
+                      elevation: 4.0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxHeight: 200, maxWidth: MediaQuery.of(context).size.width - 32),
+                        child: ListView.builder(
+                          padding: EdgeInsets.zero,
+                          shrinkWrap: true,
+                          itemCount: options.length,
+                          itemBuilder: (BuildContext context, int index) {
+                            final option = options.elementAt(index);
+                            final isAddNew = option['id'] == '__ADD_NEW__';
+                            return ListTile(
+                              leading: Icon(isAddNew ? Icons.person_add : Icons.person, color: isAddNew ? Colors.blue : Colors.grey),
+                              title: Text(option['name'], style: TextStyle(color: isAddNew ? Colors.blue : Colors.black, fontWeight: isAddNew ? FontWeight.bold : FontWeight.normal)),
+                              onTap: () => onSelected(option),
+                            );
+                          },
+                        ),
+                      ),
                     ),
-                  )
-                ],
+                  );
+                },
               ),
               const SizedBox(height: 16),
+              
               TextFormField(
                 controller: _mapLinkController,
                 decoration: InputDecoration(
@@ -324,29 +403,9 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
                     itemCount: _photoPaths.length,
                     itemBuilder: (context, index) => Stack(
                       children: [
-                        // 4. UI/UX: Local image memory efficiency (cacheWidth)
+                        // 4. Memory Efficiency: cacheWidth ကို အသုံးပြုထားသည်
                         Container(margin: const EdgeInsets.only(right: 8), width: 100, height: 100, decoration: BoxDecoration(borderRadius: BorderRadius.circular(8)), child: ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.file(File(_photoPaths[index]), fit: BoxFit.cover, cacheWidth: 300))),
                         Positioned(top: 4, right: 12, child: InkWell(onTap: () => setState(() => _photoPaths.removeAt(index)), child: Container(padding: const EdgeInsets.all(2), decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle), child: const Icon(Icons.close, color: Colors.white, size: 16)))),
                       ],
                     ),
-                  ),
-                )
-              ],
-              const SizedBox(height: 16),
-              TextFormField(controller: _remarkController, maxLines: 3, decoration: const InputDecoration(labelText: 'မှတ်ချက်', border: OutlineInputBorder())),
-              const SizedBox(height: 24),
-              SafeArea(
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 50), backgroundColor: const Color(0xFF008080), foregroundColor: Colors.white),
-                  onPressed: _isSaving ? null : _saveProperty,
-                  child: const Text('သိမ်းမည်', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                ),
-              ),
-              const SizedBox(height: 10),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
+                  )
