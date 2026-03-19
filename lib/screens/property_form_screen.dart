@@ -7,6 +7,7 @@ import 'dart:io';
 import 'dart:convert';
 import '../db/database_helper.dart';
 import '../widgets/dynamic_dropdown.dart';
+import 'owner_form_screen.dart'; // Owner အသစ်ထည့်ရန်
 
 class PropertyFormScreen extends StatefulWidget {
   final Map<String, dynamic>? editData;
@@ -29,6 +30,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
   final TextEditingController _mapLinkController = TextEditingController();
 
   String? _status = 'Available';
+  String? _propertyType = 'အိမ်အပါ'; // အသစ်ထပ်တိုးထားသော Logic
   String? _location;
   String? _roadType;
   String? _houseType;
@@ -64,57 +66,77 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
       if (d['extra_data'] != null) {
         try {
           final extra = jsonDecode(d['extra_data']);
+          if (extra['property_type'] != null) {
+            _propertyType = extra['property_type'];
+          }
           if (extra['photos'] != null) {
             _photoPaths = List<String>.from(extra['photos']);
           }
-        } catch (_) {}
-      }
-    }
-  }
-
-  Future<void> _loadOwners() async {
-    final owners = await DatabaseHelper.instance.getAllOwners();
-    setState(() {
-      _owners = owners;
-    });
-  }
-
-  Future<void> _pickImages() async {
-    final picker = ImagePicker();
-    final pickedFiles = await picker.pickMultiImage();
-    if (pickedFiles.isNotEmpty) {
-      final appDir = await getApplicationDocumentsDirectory();
-      final photoDir = Directory('${appDir.path}/property_photos');
-      if (!await photoDir.exists()) await photoDir.create(recursive: true);
-
-      for (var file in pickedFiles) {
-        final bytes = await file.readAsBytes();
-        img.Image? image = img.decodeImage(bytes);
-        if (image != null) {
-          img.Image resized = img.copyResize(image, width: 800);
-          final newFile = File('${photoDir.path}/${DateTime.now().millisecondsSinceEpoch}_${file.name}');
-          await newFile.writeAsBytes(img.encodeJpg(resized, quality: 80));
-          setState(() {
-            _photoPaths.add(newFile.path);
-          });
+        } catch (e) {
+          debugPrint("JSON Decode Error: ${e.toString()}");
         }
       }
     }
   }
 
-  // Google Maps ဖွင့်ရန် Function
+  // 1. Memory Management
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _askingPriceController.dispose();
+    _bottomPriceController.dispose();
+    _eastController.dispose();
+    _westController.dispose();
+    _southController.dispose();
+    _northController.dispose();
+    _remarkController.dispose();
+    _mapLinkController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadOwners() async {
+    try {
+      final owners = await DatabaseHelper.instance.getAllOwners();
+      setState(() => _owners = owners);
+    } catch (e) {
+      debugPrint("Load Owners Error: ${e.toString()}");
+    }
+  }
+
+  Future<void> _pickImages() async {
+    try {
+      final picker = ImagePicker();
+      final pickedFiles = await picker.pickMultiImage();
+      if (pickedFiles.isNotEmpty) {
+        final appDir = await getApplicationDocumentsDirectory();
+        final photoDir = Directory('${appDir.path}/property_photos');
+        if (!await photoDir.exists()) await photoDir.create(recursive: true);
+
+        for (var file in pickedFiles) {
+          final bytes = await file.readAsBytes();
+          img.Image? image = img.decodeImage(bytes);
+          if (image != null) {
+            img.Image resized = img.copyResize(image, width: 800);
+            final newFile = File('${photoDir.path}/${DateTime.now().millisecondsSinceEpoch}_${file.name}');
+            await newFile.writeAsBytes(img.encodeJpg(resized, quality: 80));
+            setState(() => _photoPaths.add(newFile.path));
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Image Pick Error: ${e.toString()}");
+    }
+  }
+
   void _openGoogleMaps() async {
     String urlStr = _mapLinkController.text.trim();
-    if (urlStr.isEmpty) {
-      urlStr = 'https://maps.google.com'; // လင့်ခ်မရှိလျှင် မြေပုံအလွတ်ဖွင့်မည်
-    }
+    if (urlStr.isEmpty) urlStr = 'https://maps.google.com';
     final Uri url = Uri.parse(urlStr);
     try {
       await launchUrl(url, mode: LaunchMode.externalApplication);
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('မြေပုံ ဖွင့်၍ မရပါ')));
-      }
+    } catch (e) {
+      debugPrint("Map Launch Error: ${e.toString()}");
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('မြေပုံ ဖွင့်၍ မရပါ')));
     }
   }
 
@@ -136,45 +158,47 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
       'status': _status,
       'location_id': _location,
       'road_type': _roadType,
-      'house_type': _houseType,
+      'house_type': _propertyType == 'ခြံသီးသန့်' ? null : _houseType, // ခြံသီးသန့်ဆိုလျှင် အိမ်အမျိုးအစား မသိမ်းပါ
       'land_type': _landType,
       'owner_id': _ownerId,
       'is_deleted': 0,
-      'is_synced': 0, // Auto sync အတွက် 0 မှတ်ပါမည်
-      'extra_data': jsonEncode({'photos': _photoPaths}),
+      'is_synced': 0, 
+      'extra_data': jsonEncode({
+        'photos': _photoPaths,
+        'property_type': _propertyType, // အမျိုးအစားကို သိမ်းဆည်းမည်
+      }),
       'updated_at': DateTime.now().toUtc().toIso8601String(),
     };
 
-    if (widget.editData == null) {
-      data['created_at'] = DateTime.now().toUtc().toIso8601String();
-      await DatabaseHelper.instance.insertProperty(data);
-    } else {
-      data['created_at'] = widget.editData!['created_at'];
-      await DatabaseHelper.instance.updateProperty(data);
-    }
-
-    if (mounted) {
-      Navigator.pop(context, true);
+    try {
+      if (widget.editData == null) {
+        data['created_at'] = DateTime.now().toUtc().toIso8601String();
+        await DatabaseHelper.instance.insertProperty(data);
+      } else {
+        data['created_at'] = widget.editData!['created_at'];
+        await DatabaseHelper.instance.updateProperty(data);
+      }
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      debugPrint("Save Property Error: ${e.toString()}");
+      setState(() => _isSaving = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // ⚠️ Keyboard Bug အမြစ်ပြတ်ရှင်းရန် GestureDetector ဖြင့် အုပ်ထားခြင်း
     return GestureDetector(
       onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
       child: Scaffold(
         appBar: AppBar(
           title: Text(widget.editData == null ? 'အိမ်ခြံမြေ အသစ်ထည့်ရန်' : 'အိမ်ခြံမြေ ပြင်ဆင်ရန်', style: const TextStyle(fontSize: 18)),
-          actions: [
-            if (_isSaving) const Padding(padding: EdgeInsets.all(16.0), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
-          ],
+          actions: [ if (_isSaving) const Padding(padding: EdgeInsets.all(16.0), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))) ],
         ),
         body: Form(
           key: _formKey,
           child: ListView(
             padding: const EdgeInsets.all(16),
-            physics: const BouncingScrollPhysics(), // Scroll ပို Smooth ဖြစ်စေရန်
+            physics: const BouncingScrollPhysics(), 
             children: [
               TextFormField(
                 controller: _titleController,
@@ -182,6 +206,19 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
                 validator: (v) => v == null || v.isEmpty ? 'ခေါင်းစဉ် ထည့်ပါ' : null,
               ),
               const SizedBox(height: 16),
+              
+              // အမျိုးအစား (အိမ်အပါ / ခြံသီးသန့်) Logic
+              DropdownButtonFormField<String>(
+                value: _propertyType,
+                decoration: const InputDecoration(labelText: 'အမျိုးအစား', border: OutlineInputBorder()),
+                items: ['အိမ်အပါ', 'ခြံသီးသန့်'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                onChanged: (v) => setState(() {
+                  _propertyType = v;
+                  if (v == 'ခြံသီးသန့်') _houseType = null; // ခြံသီးသန့်ရွေးလျှင် အိမ်အမျိုးအစားကို ဖျက်မည်
+                }),
+              ),
+              const SizedBox(height: 16),
+
               Row(
                 children: [
                   Expanded(child: TextFormField(controller: _askingPriceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'ခေါ်ဈေး (သိန်း) *', border: OutlineInputBorder()), validator: (v) => v == null || v.isEmpty ? 'ဈေးနှုန်း ထည့်ပါ' : null)),
@@ -218,37 +255,55 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
                 ],
               ),
               const SizedBox(height: 16),
-              DynamicDropdown(label: 'အိမ်အမျိုးအစား', category: 'house_type', selectedValue: _houseType, onChanged: (v) => setState(() => _houseType = v)),
-              const SizedBox(height: 16),
+              
+              // ခြံသီးသန့် မဟုတ်မှသာ အိမ်အမျိုးအစားကို ပြမည်
+              if (_propertyType != 'ခြံသီးသန့်') ...[
+                DynamicDropdown(label: 'အိမ်အမျိုးအစား', category: 'house_type', selectedValue: _houseType, onChanged: (v) => setState(() => _houseType = v)),
+                const SizedBox(height: 16),
+              ],
               
               const Text('ပိုင်ရှင်အချက်အလက်', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
               const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                value: _ownerId,
-                decoration: const InputDecoration(labelText: 'ပိုင်ရှင် ရွေးချယ်ပါ', border: OutlineInputBorder()),
-                items: [
-                  const DropdownMenuItem(value: null, child: Text('မရွေးချယ်ပါ')),
-                  ..._owners.map((o) => DropdownMenuItem(value: o['id'] as String, child: Text(o['name']))).toList()
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _ownerId,
+                      decoration: const InputDecoration(labelText: 'ပိုင်ရှင် ရွေးချယ်ပါ', border: OutlineInputBorder()),
+                      items: [
+                        const DropdownMenuItem(value: null, child: Text('မရွေးချယ်ပါ')),
+                        ..._owners.map((o) => DropdownMenuItem(value: o['id'] as String, child: Text(o['name']))).toList()
+                      ],
+                      onChanged: (v) => setState(() => _ownerId = v),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Owner အသစ်ထည့်ရန် ခလုတ်
+                  Container(
+                    height: 55,
+                    decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                    child: IconButton(
+                      icon: Icon(Icons.person_add, color: Theme.of(context).colorScheme.primary),
+                      tooltip: 'ပိုင်ရှင်အသစ်ထည့်မည်',
+                      onPressed: () async {
+                        final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => const OwnerFormScreen()));
+                        if (result == true) _loadOwners(); // အသစ်ထည့်ပြီးလျှင် Data ပြန်ခေါ်မည်
+                      },
+                    ),
+                  )
                 ],
-                onChanged: (v) => setState(() => _ownerId = v),
               ),
               const SizedBox(height: 16),
-
-              // ⚠️ မြေပုံလင့်ခ် (Map ခလုတ်ပါဝင်သည်)
               TextFormField(
                 controller: _mapLinkController,
                 decoration: InputDecoration(
                   labelText: 'မြေပုံလင့်ခ် (Google Maps URL)',
                   border: const OutlineInputBorder(),
-                  prefixIcon: IconButton(
-                    icon: const Icon(Icons.map, color: Colors.blue),
-                    tooltip: 'Google Maps ဖွင့်ရန်',
-                    onPressed: _openGoogleMaps, // ခလုတ်နှိပ်လျှင် Google Maps သို့ သွားမည်
-                  ),
+                  prefixIcon: IconButton(icon: const Icon(Icons.map, color: Colors.blue), tooltip: 'Google Maps ဖွင့်ရန်', onPressed: _openGoogleMaps),
                 ),
               ),
               const SizedBox(height: 16),
-              
               const Text('ဓာတ်ပုံများ:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
               const SizedBox(height: 8),
               InkWell(
@@ -269,7 +324,8 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
                     itemCount: _photoPaths.length,
                     itemBuilder: (context, index) => Stack(
                       children: [
-                        Container(margin: const EdgeInsets.only(right: 8), width: 100, height: 100, decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), image: DecorationImage(image: FileImage(File(_photoPaths[index])), fit: BoxFit.cover))),
+                        // 4. UI/UX: Local image memory efficiency (cacheWidth)
+                        Container(margin: const EdgeInsets.only(right: 8), width: 100, height: 100, decoration: BoxDecoration(borderRadius: BorderRadius.circular(8)), child: ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.file(File(_photoPaths[index]), fit: BoxFit.cover, cacheWidth: 300))),
                         Positioned(top: 4, right: 12, child: InkWell(onTap: () => setState(() => _photoPaths.removeAt(index)), child: Container(padding: const EdgeInsets.all(2), decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle), child: const Icon(Icons.close, color: Colors.white, size: 16)))),
                       ],
                     ),
@@ -277,18 +333,16 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
                 )
               ],
               const SizedBox(height: 16),
-              TextFormField(
-                controller: _remarkController,
-                maxLines: 3,
-                decoration: const InputDecoration(labelText: 'မှတ်ချက်', border: OutlineInputBorder()),
-              ),
+              TextFormField(controller: _remarkController, maxLines: 3, decoration: const InputDecoration(labelText: 'မှတ်ချက်', border: OutlineInputBorder())),
               const SizedBox(height: 24),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 50), backgroundColor: const Color(0xFF008080), foregroundColor: Colors.white),
-                onPressed: _isSaving ? null : _saveProperty,
-                child: const Text('သိမ်းမည်', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              SafeArea(
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 50), backgroundColor: const Color(0xFF008080), foregroundColor: Colors.white),
+                  onPressed: _isSaving ? null : _saveProperty,
+                  child: const Text('သိမ်းမည်', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 10),
             ],
           ),
         ),
