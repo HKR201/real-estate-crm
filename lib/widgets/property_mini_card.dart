@@ -56,17 +56,43 @@ class PropertyMiniCard extends StatelessWidget {
                     ),
                   ),
                   
-                  // ⚠️ Image Section (Caching စနစ် ပေါင်းထည့်ထားသည်)
+                  // ⚠️ Image Section (PageView ဖြင့် ပုံများစွာကို ပွတ်ဆွဲကြည့်နိုင်သည်)
                   if (photos.isNotEmpty)
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: _buildImage(photos.first),
+                    SizedBox(
+                      height: 220,
+                      child: PageView.builder(
+                        itemCount: photos.length,
+                        itemBuilder: (context, index) {
+                          return GestureDetector(
+                            onTap: () {
+                              // ⚠️ ပုံကိုနှိပ်လျှင် Full Screen ချဲ့ကြည့်နိုင်မည်
+                              Navigator.push(
+                                context, 
+                                MaterialPageRoute(builder: (_) => FullScreenImageViewer(imagePath: photos[index]))
+                              );
+                            },
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: _buildImage(photos[index]),
+                            ),
+                          );
+                        },
+                      ),
                     )
                   else
                     Container(
-                      width: double.infinity, height: 200,
+                      width: double.infinity, height: 220,
                       decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(12)),
                       child: const Icon(Icons.image_not_supported, size: 50, color: Colors.grey),
+                    ),
+                  
+                  // ပုံအများကြီးပါလျှင် အစက်လေးများ ပြရန်
+                  if (photos.length > 1)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Center(
+                        child: Text('${photos.length} ပုံ ပါဝင်သည် (ဘေးသို့ဆွဲကြည့်ပါ)', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                      ),
                     ),
                   
                   const SizedBox(height: 16),
@@ -129,7 +155,7 @@ class PropertyMiniCard extends StatelessWidget {
                         flex: 3,
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF2E6561), // UI ပုံစံအတိုင်း Dark Green
+                            backgroundColor: const Color(0xFF2E6561),
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -189,25 +215,29 @@ class PropertyMiniCard extends StatelessWidget {
     );
   }
 
-  // ⚠️ Image Builder Function (Cloud နှင့် Local နှစ်မျိုးလုံးအတွက်)
+  // ⚠️ Image Error ရှင်းလင်းထားသော Function
   Widget _buildImage(String imagePath) {
-    const double imageHeight = 220;
     if (imagePath.startsWith('http')) {
       return CachedNetworkImage(
         imageUrl: imagePath,
         width: double.infinity,
-        height: imageHeight,
+        height: 220,
         fit: BoxFit.cover,
         placeholder: (context, url) => Container(color: Colors.grey.shade100, child: const Center(child: CircularProgressIndicator())),
         errorWidget: (context, url, error) => Container(color: Colors.grey.shade200, child: const Icon(Icons.broken_image, color: Colors.grey, size: 50)),
       );
     } else {
+      final file = File(imagePath);
+      // ပုံဖိုင် တကယ်မရှိပါက Error မတက်စေရန် စစ်ဆေးခြင်း
+      if (!file.existsSync()) {
+        return Container(color: Colors.grey.shade200, child: const Icon(Icons.image_not_supported, color: Colors.grey, size: 50));
+      }
       return Image.file(
-        File(imagePath),
+        file,
         width: double.infinity,
-        height: imageHeight,
+        height: 220,
         fit: BoxFit.cover,
-        cacheWidth: 800,
+        // ⚠️ ဤနေရာမှ cacheWidth ကို ဖြုတ်လိုက်ပါပြီ (အချို့ဖုန်းများတွင် ပုံပျောက်သွားတတ်သောကြောင့်ဖြစ်သည်)
         errorBuilder: (context, error, stackTrace) => Container(color: Colors.grey.shade200, child: const Icon(Icons.broken_image, color: Colors.grey, size: 50)),
       );
     }
@@ -229,7 +259,6 @@ class PropertyMiniCard extends StatelessWidget {
     final statusColor = _getStatusColor(status);
     final theme = Theme.of(context);
 
-    // ⚠️ Beta 1 ၏ မူလ Mini Card UI
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       elevation: 1,
@@ -242,7 +271,6 @@ class PropertyMiniCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Row 1: Title and Status
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -263,7 +291,6 @@ class PropertyMiniCard extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               
-              // Row 2: Price and Location
               RichText(
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -283,7 +310,6 @@ class PropertyMiniCard extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               
-              // Row 3: Dimensions and Sync Status
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -302,6 +328,32 @@ class PropertyMiniCard extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ⚠️ ဓာတ်ပုံကို Full Screen ချဲ့ကြည့်ရန် Class အသစ် (Zoom ဆွဲကြည့်နိုင်သည်)
+class FullScreenImageViewer extends StatelessWidget {
+  final String imagePath;
+  const FullScreenImageViewer({super.key, required this.imagePath});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: Center(
+        child: InteractiveViewer(
+          minScale: 0.5,
+          maxScale: 4.0, // လေးဆ အထိ Zoom ဆွဲချဲ့ကြည့်နိုင်မည်
+          child: imagePath.startsWith('http')
+              ? CachedNetworkImage(imageUrl: imagePath, fit: BoxFit.contain)
+              : Image.file(File(imagePath), fit: BoxFit.contain),
         ),
       ),
     );
