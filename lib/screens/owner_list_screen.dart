@@ -141,8 +141,8 @@ class _OwnerListScreenState extends State<OwnerListScreen> {
                           final owner = _filteredOwners[index];
                           final isHighlighted = owner['id'] == widget.highlightOwnerId;
                           
-                          // ⚠️ Database မှန်ကန်စေရန် phone_1 သို့ ပြန်ပြင်ထားပါသည်
-                          final String rawPhone = (owner['phone_1'] ?? '').toString().trim();
+                          // ⚠️ Database မှန်ကန်စေရန် phones ဟု ပြင်ထားသည်
+                          final String rawPhone = (owner['phones'] ?? '').toString().trim();
 
                           final highlightBgColor = isDark 
                               ? theme.colorScheme.primary.withOpacity(0.15) 
