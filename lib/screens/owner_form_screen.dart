@@ -3,7 +3,7 @@ import '../db/database_helper.dart';
 
 class OwnerFormScreen extends StatefulWidget {
   final Map<String, dynamic>? editData;
-  final String? initialName; // Property Form မှ လှမ်းပို့မည့် နာမည်
+  final String? initialName;
 
   const OwnerFormScreen({super.key, this.editData, this.initialName});
 
@@ -28,7 +28,8 @@ class _OwnerFormScreenState extends State<OwnerFormScreen> {
     }
     if (widget.editData != null) {
       _nameController.text = widget.editData!['name'] ?? '';
-      _phoneController.text = widget.editData!['phone_1'] ?? '';
+      // ⚠️ Database မှန်ကန်စေရန် phone ဟု ပြန်ပြင်ထားသည်
+      _phoneController.text = widget.editData!['phone'] ?? '';
       _addressController.text = widget.editData!['address'] ?? '';
       _remarkController.text = widget.editData!['remark'] ?? '';
     }
@@ -50,7 +51,8 @@ class _OwnerFormScreenState extends State<OwnerFormScreen> {
     Map<String, dynamic> data = {
       'id': widget.editData?['id'] ?? 'own_${DateTime.now().millisecondsSinceEpoch}',
       'name': _nameController.text.trim(),
-      'phone_1': _phoneController.text.trim(),
+      // ⚠️ Database မှန်ကန်စေရန် phone ဟု ပြန်ပြင်ထားသည်
+      'phone': _phoneController.text.trim(),
       'address': _addressController.text.trim(),
       'remark': _remarkController.text.trim(),
       'is_deleted': 0,
@@ -69,7 +71,11 @@ class _OwnerFormScreenState extends State<OwnerFormScreen> {
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       debugPrint("Save Owner Error: $e");
-      setState(() => _isSaving = false);
+      if (mounted) {
+        // ⚠️ Error တက်ပါက ချက်ချင်းသိနိုင်ရန် ပြသပေးမည်
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('သိမ်းဆည်းရန် မအောင်မြင်ပါ: $e')));
+        setState(() => _isSaving = false);
+      }
     }
   }
 
@@ -100,10 +106,9 @@ class _OwnerFormScreenState extends State<OwnerFormScreen> {
                 validator: (v) => v == null || v.isEmpty ? 'အမည် ထည့်ပါ' : null,
               ),
               const SizedBox(height: 16),
-              // ⚠️ ဖုန်းနံပါတ် ၄/၅ ခု ထည့်နိုင်ရန် Label ကို ရှင်းလင်းစွာ ပြင်ဆင်ထားသည်
               TextFormField(
                 controller: _phoneController,
-                keyboardType: TextInputType.text, // ကော်မာ (,) ရိုက်နိုင်ရန် Text အဖြစ် ထားသည်
+                keyboardType: TextInputType.text,
                 decoration: const InputDecoration(
                   labelText: 'ဖုန်းနံပါတ် (တစ်ခုထက်ပိုပါက , သို့ / ခြား၍ရေးပါ)', 
                   border: OutlineInputBorder(),
@@ -125,7 +130,7 @@ class _OwnerFormScreenState extends State<OwnerFormScreen> {
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 50),
-                  backgroundColor: const Color(0xFF008080),
+                  backgroundColor: const Color(0xFF2E6561), // Main Theme Color အတိုင်း ညှိထားသည်
                   foregroundColor: Colors.white,
                 ),
                 onPressed: _isSaving ? null : _saveOwner,
