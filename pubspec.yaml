@@ -31,8 +31,8 @@ flutter:
   assets:
     - assets/
 
-# ⚠️ App Icon သတ်မှတ်ချက်
-flutter_icons:
+# ⚠️ Warning မပေါ်စေရန် flutter_launcher_icons ဟု အမည်ပြောင်းထားသည်
+flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
   image_path: "assets/logo.jpg"
@@ -47,4 +47,3 @@ flutter_native_splash:
   android_12:
     color: "#F5F8F8"
     image: "assets/logo.jpg"
-    
