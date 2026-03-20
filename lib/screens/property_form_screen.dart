@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart'; // ⚠️ Map Icon နှိပ်လျှင် Google Map ဖွင့်ရန်
 import '../db/database_helper.dart';
 import 'owner_form_screen.dart';
 
@@ -37,7 +38,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
 
   List<String> _photos = [];
   bool _isSaving = false;
-  bool _isLoading = true; // ⚠️ UI မပွင့်ခင် Data အားလုံး အသင့်ဖြစ်ရန် Loading State ထည့်ထားသည်
+  bool _isLoading = true;
 
   List<String> _locations = [];
   List<String> _roadTypes = [];
@@ -54,7 +55,6 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
     _initializeData();
   }
 
-  // ⚠️ Edit Data များကို အရင်ဆွဲထည့်ပြီးမှ Metadata များကို ဆက်ဆွဲမည်
   Future<void> _initializeData() async {
     if (widget.editData != null) {
       _loadEditData(widget.editData!);
@@ -63,7 +63,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
     
     if (mounted) {
       setState(() {
-        _isLoading = false; // အားလုံးပြီးမှ Form ကို ဖွင့်မည်
+        _isLoading = false;
       });
     }
   }
@@ -96,13 +96,11 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
   }
 
   Future<void> _loadMetadata() async {
-    // 1. Metadata Table မှ သိမ်းထားသော Data များ
     final locMeta = await DatabaseHelper.instance.getMetadata('location');
     final roadMeta = await DatabaseHelper.instance.getMetadata('road_type');
     final landMeta = await DatabaseHelper.instance.getMetadata('land_type');
     final houseMeta = await DatabaseHelper.instance.getMetadata('house_type');
 
-    // 2. ⚠️ Properties Table တွင် အမှန်တကယ် သုံးထားသော Data များ (ပျောက်မသွားစေရန်)
     final locDistinct = await DatabaseHelper.instance.getDistinctPropertyValues('location_id');
     final roadDistinct = await DatabaseHelper.instance.getDistinctPropertyValues('road_type');
     final landDistinct = await DatabaseHelper.instance.getDistinctPropertyValues('land_type');
@@ -111,7 +109,6 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
     final owners = await DatabaseHelper.instance.getAllOwners();
 
     setState(() {
-      // ⚠️ Data ၂ မျိုးလုံးကို ပေါင်းပြီး၊ ထပ်နေသည်များကို Set ဖြင့် ရှင်းထုတ်ကာ Dropdown သို့ ပို့မည်
       _locations = {...locMeta, ...locDistinct}.toList();
       _roadTypes = {...roadMeta, ...roadDistinct}.toList();
       _landTypes = {...landMeta, ...landDistinct}.toList();
@@ -119,7 +116,6 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
       _owners = owners;
     });
 
-    // ⚠️ ပိုင်ရှင် ID ရှိပါက Autocomplete တွင် အလိုလို ပေါ်နေစေရန် Text ဖြည့်ပေးခြင်း
     if (_ownerId != null) {
       final owner = _owners.where((o) => o['id'] == _ownerId).toList();
       if (owner.isNotEmpty) {
@@ -169,7 +165,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('$title အသစ်ထည့်မည်'),
+        title: Text('$title', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         content: TextField(controller: ctrl, autofocus: true, decoration: const InputDecoration(border: OutlineInputBorder())),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ပယ်ဖျက်')),
@@ -194,11 +190,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
     setState(() => _isSaving = true);
 
     final savedHouseType = _propertyType == 'ခြံသီးသန့်' ? null : _houseType;
-
-    final extraData = jsonEncode({
-      'photos': _photos,
-      'property_type': _propertyType,
-    });
+    final extraData = jsonEncode({'photos': _photos, 'property_type': _propertyType});
 
     final data = {
       'id': widget.editData?['id'] ?? 'prop_${DateTime.now().millisecondsSinceEpoch}',
@@ -237,7 +229,8 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
       setState(() => _isSaving = false);
     }
   }
-    Widget _buildTextField(TextEditingController ctrl, String label, {bool isNumber = false, double fontSize = 13, bool isRequired = false}) {
+    // ⚠️ Suffix Icon ထည့်သွင်းနိုင်ရန် ပြင်ဆင်ထားသည်
+  Widget _buildTextField(TextEditingController ctrl, String label, {bool isNumber = false, double fontSize = 13, bool isRequired = false, Widget? suffixIcon}) {
     return TextFormField(
       controller: ctrl,
       keyboardType: isNumber ? TextInputType.number : TextInputType.text,
@@ -248,14 +241,17 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         isDense: true,
+        suffixIcon: suffixIcon,
       ),
       validator: isRequired ? (v) => v == null || v.isEmpty ? 'လိုအပ်ပါသည်' : null : null,
     );
   }
 
-  Widget _buildDropdown(String label, String? value, List<String> items, Function(String?) onChanged, {String? addCategory, double fontSize = 13}) {
+  // ⚠️ Add New စာသားကို စိတ်ကြိုက်ပြောင်းနိုင်ရန် addTextLabel ကို ထည့်သွင်းထားသည်
+  Widget _buildDropdown(String label, String? value, List<String> items, Function(String?) onChanged, {String? addCategory, String? addTextLabel, double fontSize = 13}) {
     final theme = Theme.of(context);
     final validValue = (value != null && items.contains(value)) ? value : null;
+    final displayAddText = addTextLabel ?? '$label အသစ်ထည့်မည်';
 
     return DropdownButtonFormField<String>(
       isExpanded: true,
@@ -279,14 +275,14 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
               children: [
                 Icon(Icons.add, size: 16, color: theme.colorScheme.primary),
                 const SizedBox(width: 6),
-                Text('$label အသစ်ထည့်မည်', style: TextStyle(color: theme.colorScheme.primary, fontSize: 13, fontWeight: FontWeight.w600)),
+                Text(displayAddText, style: TextStyle(color: theme.colorScheme.primary, fontSize: 13, fontWeight: FontWeight.w600)),
               ],
             ),
           ),
       ],
       onChanged: (v) {
         if (v == 'ADD_NEW' && addCategory != null) {
-          _addNewMetadata(addCategory, label);
+          _addNewMetadata(addCategory, displayAddText);
         } else {
           onChanged(v);
         }
@@ -296,11 +292,8 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // ⚠️ Loading ပြီးမှသာ UI ကို Render လုပ်မည် (Owner Name သေချာပေါက် ပေါ်လာရန်)
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     final theme = Theme.of(context);
@@ -353,20 +346,22 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
               ),
               const SizedBox(height: 16),
 
-              _buildDropdown('မြို့နယ်/တည်နေရာ', _locationId, _locations, (v) => setState(() => _locationId = v), addCategory: 'location', fontSize: 14),
+              _buildDropdown('မြို့နယ်/တည်နေရာ', _locationId, _locations, (v) => setState(() => _locationId = v), addCategory: 'location', addTextLabel: 'မြို့နယ်/တည်နေရာ အသစ်ထည့်မည်', fontSize: 14),
               const SizedBox(height: 16),
 
               Row(
                 children: [
-                  Expanded(child: _buildDropdown('လမ်းအမျိုးအစား', _roadType, _roadTypes, (v) => setState(() => _roadType = v), addCategory: 'road_type')),
+                  // ⚠️ လမ်းအမျိုးအစား ဆိုပြီး ရှည်မနေစေရန် "လမ်း အသစ်ထည့်မည်" ဟု ပြင်ဆင်ထားသည်
+                  Expanded(child: _buildDropdown('လမ်းအမျိုးအစား', _roadType, _roadTypes, (v) => setState(() => _roadType = v), addCategory: 'road_type', addTextLabel: 'လမ်း အသစ်ထည့်မည်')),
                   const SizedBox(width: 12),
-                  Expanded(child: _buildDropdown('မြေအမျိုးအစား', _landType, _landTypes, (v) => setState(() => _landType = v), addCategory: 'land_type')),
+                  // ⚠️ မြေအမျိုးအစား ဆိုပြီး ရှည်မနေစေရန် "မြေ အသစ်ထည့်မည်" ဟု ပြင်ဆင်ထားသည်
+                  Expanded(child: _buildDropdown('မြေအမျိုးအစား', _landType, _landTypes, (v) => setState(() => _landType = v), addCategory: 'land_type', addTextLabel: 'မြေ အသစ်ထည့်မည်')),
                 ],
               ),
               const SizedBox(height: 16),
 
               if (_propertyType == 'အိမ်အပါ') ...[
-                _buildDropdown('အိမ်အမျိုးအစား', _houseType, _houseTypes, (v) => setState(() => _houseType = v), addCategory: 'house_type', fontSize: 14),
+                _buildDropdown('အိမ်အမျိုးအစား', _houseType, _houseTypes, (v) => setState(() => _houseType = v), addCategory: 'house_type', addTextLabel: 'အိမ် အသစ်ထည့်မည်', fontSize: 14),
                 const SizedBox(height: 16),
               ],
 
@@ -388,7 +383,6 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
                       _ownerSearchCtrl.text = ''; 
                       final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => OwnerFormScreen(initialName: option['name'])));
                       if (result == true) {
-                        // ⚠️ ပိုင်ရှင်သစ် သိမ်းပြီးပြန်လာပါက Data ပြန်ခေါ်ပြီး အလိုလိုရွေးပေးမည်
                         setState(() => _isLoading = true);
                         await _loadMetadata();
                         final newOwner = _owners.firstWhere((o) => o['name'] == option['name'], orElse: () => {});
@@ -460,7 +454,26 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
               ),
               const SizedBox(height: 16),
 
-              _buildTextField(_mapLinkCtrl, 'Google Map Link (Optional)', fontSize: 14),
+              // ⚠️ Beta 1 မှ Google Map Icon ကို ပြန်လည်ထည့်သွင်းပေးထားသည်
+              _buildTextField(
+                _mapLinkCtrl, 
+                'Google Map Link (Optional)', 
+                fontSize: 14,
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.map, color: Colors.blue),
+                  onPressed: () async {
+                    final url = _mapLinkCtrl.text.trim();
+                    final uri = url.isNotEmpty && url.startsWith('http') 
+                        ? Uri.parse(url) 
+                        : Uri.parse('https://maps.google.com');
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    } else {
+                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Map ဖွင့်၍ မရပါ')));
+                    }
+                  },
+                ),
+              ),
               const SizedBox(height: 16),
 
               TextFormField(
