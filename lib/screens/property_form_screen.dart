@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import '../db/database_helper.dart';
-import 'owner_form_screen.dart'; // Owner အသစ်ထည့်ရန် Import
+import 'owner_form_screen.dart';
 
 class PropertyFormScreen extends StatefulWidget {
   final Map<String, dynamic>? editData;
@@ -25,9 +25,8 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
   final _northCtrl = TextEditingController();
   final _remarkCtrl = TextEditingController();
   final _mapLinkCtrl = TextEditingController();
-  final _ownerSearchCtrl = TextEditingController(); // ⚠️ Owner ရှာဖွေရန်
+  final _ownerSearchCtrl = TextEditingController();
 
-  // ⚠️ Default ကို သင်သတ်မှတ်ထားသည့်အတိုင်း "ခြံသီးသန့်" ဟု ပြောင်းထားပါသည်
   String _propertyType = 'ခြံသီးသန့်';
   String _status = 'Available';
   String? _locationId;
@@ -68,7 +67,6 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
       _owners = owners;
     });
 
-    // Edit Mode တွင် Owner အမည်ကို ဖြည့်သွင်းပေးရန်
     if (_ownerId != null) {
       final owner = _owners.where((o) => o['id'] == _ownerId).toList();
       if (owner.isNotEmpty) {
@@ -103,7 +101,6 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
     }
   }
 
-  // ⚠️ Beta 1 ၏ မူလ Camera နှင့် Gallery ရွေးချယ်နိုင်သော စနစ် (ပြန်လည်ထည့်သွင်းထားသည်)
   void _showImagePickerOptions() {
     showModalBottomSheet(
       context: context,
@@ -214,7 +211,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
       'location_id': _locationId,
       'road_type': _roadType,
       'land_type': _landType,
-      'owner_id': _ownerId, // ⚠️ Autocomplete မှ ရလာသော Owner ID ကို သိမ်းမည်
+      'owner_id': _ownerId,
       'map_link': _mapLinkCtrl.text.trim(),
       'remark': _remarkCtrl.text.trim(),
       'extra_data': extraData,
@@ -238,7 +235,6 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
     }
   }
 
-  // ⚠️ Font Size ညီညာစေရန် Standard TextField Widget
   Widget _buildTextField(TextEditingController ctrl, String label, {bool isNumber = false, double fontSize = 13, bool isRequired = false}) {
     return TextFormField(
       controller: ctrl,
@@ -255,7 +251,6 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
     );
   }
 
-  // ⚠️ Minimalist Add Button ပါဝင်သော Standard Dropdown Widget
   Widget _buildDropdown(String label, String? value, List<String> items, Function(String?) onChanged, {String? addCategory, double fontSize = 13}) {
     final theme = Theme.of(context);
     final validValue = (value != null && items.contains(value)) ? value : null;
@@ -322,7 +317,6 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
               _buildDropdown('အမျိုးအစား', _propertyType, _propertyTypes, (v) => setState(() => _propertyType = v!), fontSize: 14),
               const SizedBox(height: 16),
 
-              // ⚠️ စာလုံးပြတ်မသွားစေရန် Label ကို ပြင်ဆင်ထားသည်
               Row(
                 children: [
                   Expanded(child: _buildTextField(_askingPriceCtrl, 'ခေါ်ဈေး(သိန်း)', isNumber: true)),
@@ -337,7 +331,6 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
 
               const Text('အကျယ်အဝန်း (ပေ)', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 13)),
               const SizedBox(height: 8),
-              // ⚠️ တောင်၊ မြောက် အတိအကျ ဖြည့်စွက်ပေးထားသည်
               Row(
                 children: [
                   Expanded(child: _buildTextField(_eastCtrl, 'အရှေ့', isNumber: true)),
@@ -363,7 +356,6 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
               ),
               const SizedBox(height: 24),
 
-              // ⚠️ Beta 1 ၏ မူလ Owner Autocomplete စနစ် (Minimalist Add Button ဖြင့် ပေါင်းစပ်ထားသည်)
               const Text('ပိုင်ရှင်အချက်အလက်', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 13)),
               const SizedBox(height: 8),
               LayoutBuilder(
@@ -375,20 +367,18 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
                     if (query.isEmpty) return const Iterable<Map<String, dynamic>>.empty();
                     
                     final matches = _owners.where((o) => (o['name'] ?? '').toLowerCase().contains(query.toLowerCase())).toList();
-                    // ⚠️ ရှာမတွေ့ပါက သို့မဟုတ် ရှာရင်းနှင့် အသစ်ထည့်လိုပါက Add New Option ကို အောက်ဆုံးမှ ပြမည်
                     matches.add({'id': '__ADD_NEW__', 'name': query});
                     return matches;
                   },
                   onSelected: (option) async {
                     if (option['id'] == '__ADD_NEW__') {
-                      _ownerSearchCtrl.text = ''; // Clear text
-                      // ပိုင်ရှင်သစ် ဖောင်သို့ သွားမည်
+                      _ownerSearchCtrl.text = ''; 
                       final result = await Navigator.push(
                         context,
                         MaterialPageRoute(builder: (_) => OwnerFormScreen(initialName: option['name'])),
                       );
                       if (result == true) {
-                        await _loadMetadata(); // Reload owners
+                        await _loadMetadata(); 
                       }
                     } else {
                       setState(() {
@@ -414,7 +404,6 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
                               final isAddNew = option['id'] == '__ADD_NEW__';
 
                               if (isAddNew) {
-                                // ⚠️ Minimalist Add Button UI
                                 return InkWell(
                                   onTap: () => onSelected(option),
                                   child: Container(
@@ -451,6 +440,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
                       ),
                     );
                   },
+                  // ⚠️ Syntax Error ဖြစ်ခဲ့သော အပိုင်းကို အမှားကင်းစွာ ပြန်လည်ရေးသားထားသည်
                   fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
                     return TextFormField(
                       controller: textEditingController,
@@ -463,6 +453,29 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                         isDense: true,
-                        suffixIcon: _ownerId != null 
-                            ? IconButton(
-                                i
+                        suffixIcon: _ownerId == null ? null : IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () {
+                            setState(() {
+                              _ownerId = null;
+                              textEditingController.clear();
+                            });
+                          },
+                        ),
+                      ),
+                      onChanged: (val) {
+                        if (val.isEmpty) setState(() => _ownerId = null);
+                      },
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              _buildTextField(_mapLinkCtrl, 'Google Map Link (Optional)', fontSize: 14),
+              const SizedBox(height: 16),
+
+              TextFormField(
+                controller: _remarkCtrl,
+                maxLines: 3,
+                style: c
