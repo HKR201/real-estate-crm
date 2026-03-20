@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:convert'; // ⚠️ extra_data သုံးရန် ထပ်တိုးထားသည်
 import '../db/database_helper.dart';
 
 class OwnerFormScreen extends StatefulWidget {
@@ -28,10 +29,19 @@ class _OwnerFormScreenState extends State<OwnerFormScreen> {
     }
     if (widget.editData != null) {
       _nameController.text = widget.editData!['name'] ?? '';
-      // ⚠️ Database မှန်ကန်စေရန် phone_1 သို့ ပြန်ပြင်ထားပါသည်
-      _phoneController.text = widget.editData!['phone_1'] ?? '';
-      _addressController.text = widget.editData!['address'] ?? '';
+      // ⚠️ Database မှန်ကန်စေရန် phones (s ပါသည်) ဟု ပြင်ထားသည်
+      _phoneController.text = widget.editData!['phones'] ?? '';
       _remarkController.text = widget.editData!['remark'] ?? '';
+      
+      // ⚠️ address ကို extra_data ထဲမှ ပြန်ထုတ်ယူခြင်း
+      if (widget.editData!['extra_data'] != null) {
+        try {
+          final extra = jsonDecode(widget.editData!['extra_data']);
+          _addressController.text = extra['address'] ?? '';
+        } catch (e) {
+          debugPrint('JSON Parse Error: $e');
+        }
+      }
     }
   }
 
@@ -51,10 +61,13 @@ class _OwnerFormScreenState extends State<OwnerFormScreen> {
     Map<String, dynamic> data = {
       'id': widget.editData?['id'] ?? 'own_${DateTime.now().millisecondsSinceEpoch}',
       'name': _nameController.text.trim(),
-      // ⚠️ Database မှန်ကန်စေရန် phone_1 သို့ ပြန်ပြင်ထားပါသည်
-      'phone_1': _phoneController.text.trim(),
-      'address': _addressController.text.trim(),
+      // ⚠️ Database ၏ အမည်မှန် phones ကို အသုံးပြုထားသည်
+      'phones': _phoneController.text.trim(),
       'remark': _remarkController.text.trim(),
+      // ⚠️ Database တွင် address column မရှိသဖြင့် extra_data တွင် သိမ်းထားသည်
+      'extra_data': jsonEncode({
+        'address': _addressController.text.trim(),
+      }),
       'is_deleted': 0,
       'is_synced': 0,
       'updated_at': DateTime.now().toUtc().toIso8601String(),
@@ -72,7 +85,7 @@ class _OwnerFormScreenState extends State<OwnerFormScreen> {
     } catch (e) {
       debugPrint("Save Owner Error: $e");
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('သိမ်းဆည်းရန် မအောင်မြင်ပါ: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
         setState(() => _isSaving = false);
       }
     }
