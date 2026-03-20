@@ -4,7 +4,7 @@ import '../db/database_helper.dart';
 import 'owner_form_screen.dart';
 
 class OwnerListScreen extends StatefulWidget {
-  final String? highlightOwnerId; // ⚠️ Property Card မှ လှမ်းပို့မည့် ပိုင်ရှင် ID
+  final String? highlightOwnerId;
 
   const OwnerListScreen({super.key, this.highlightOwnerId});
 
@@ -26,23 +26,33 @@ class _OwnerListScreenState extends State<OwnerListScreen> {
 
   Future<void> _loadOwners() async {
     setState(() => _isLoading = true);
-    final data = await DatabaseHelper.instance.getAllOwners();
+    
+    try {
+      final rawData = await DatabaseHelper.instance.getAllOwners();
+      // ⚠️ အရေးကြီး: Read-only error မတက်စေရန် Modifiable List အဖြစ် ပြောင်းခြင်း
+      final List<Map<String, dynamic>> data = List<Map<String, dynamic>>.from(rawData);
 
-    // ⚠️ Highlight လုပ်မည့် ပိုင်ရှင်ကို စာရင်း၏ 'ထိပ်ဆုံး' သို့ အလိုလို ဆွဲတင်ပေးခြင်း
-    if (widget.highlightOwnerId != null) {
-      final index = data.indexWhere((o) => o['id'] == widget.highlightOwnerId);
-      if (index != -1) {
-        final targetOwner = data.removeAt(index);
-        data.insert(0, targetOwner);
+      // Highlight လုပ်မည့်သူကို ထိပ်ဆုံးသို့ ဆွဲတင်မည်
+      if (widget.highlightOwnerId != null) {
+        final index = data.indexWhere((o) => o['id'] == widget.highlightOwnerId);
+        if (index != -1) {
+          final targetOwner = data.removeAt(index);
+          data.insert(0, targetOwner);
+        }
       }
-    }
 
-    if (mounted) {
-      setState(() {
-        _owners = data;
-        _filteredOwners = data;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _owners = data;
+          _filteredOwners = data;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error loading owners: $e");
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -102,32 +112,30 @@ class _OwnerListScreenState extends State<OwnerListScreen> {
                         physics: const BouncingScrollPhysics(),
                         itemBuilder: (context, index) {
                           final owner = _filteredOwners[index];
-                          // ⚠️ ID တူပါက Highlight အသက်ဝင်မည်
                           final isHighlighted = owner['id'] == widget.highlightOwnerId;
+
+                          // ⚠️ Minimalist Highlight အရောင်သတ်မှတ်ချက်များ
+                          final highlightBgColor = isDark 
+                              ? theme.colorScheme.primary.withOpacity(0.15) 
+                              : theme.colorScheme.primary.withOpacity(0.05);
+                          final borderColor = isHighlighted 
+                              ? theme.colorScheme.primary.withOpacity(0.5) 
+                              : Colors.grey.withOpacity(0.2);
 
                           return Card(
                             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                            elevation: isHighlighted ? 2 : 1, // Highlight ဖြစ်လျှင် အရိပ်လေး ပိုထွက်မည်
+                            elevation: 0, // Minimalist ဖြစ်စေရန် အရိပ်ဖျောက်ထားသည်
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
-                              // ⚠️ Minimalist Highlight Border
-                              side: BorderSide(
-                                color: isHighlighted 
-                                    ? theme.colorScheme.primary.withOpacity(0.5) 
-                                    : Colors.grey.withOpacity(0.2),
-                                width: isHighlighted ? 1.5 : 1.0,
-                              ),
+                              side: BorderSide(color: borderColor, width: 1.0),
                             ),
-                            // ⚠️ Minimalist Highlight Background (Light နှင့် Dark Mode နှစ်မျိုးလုံး မျက်စိမနောက်စေရန်)
-                            color: isHighlighted
-                                ? (isDark 
-                                    ? theme.colorScheme.primary.withOpacity(0.15) 
-                                    : theme.colorScheme.primary.withOpacity(0.05))
-                                : theme.cardColor,
+                            color: isHighlighted ? highlightBgColor : theme.cardColor,
                             child: ListTile(
                               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                               leading: CircleAvatar(
-                                backgroundColor: isHighlighted ? theme.colorScheme.primary : Colors.grey.shade300,
+                                backgroundColor: isHighlighted 
+                                    ? theme.colorScheme.primary.withOpacity(0.8) 
+                                    : Colors.grey.shade200,
                                 child: Icon(Icons.person, color: isHighlighted ? Colors.white : Colors.grey.shade600),
                               ),
                               title: Text(
