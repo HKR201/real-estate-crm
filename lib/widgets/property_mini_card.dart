@@ -6,7 +6,7 @@ import 'dart:io';
 import 'package:url_launcher/url_launcher.dart';
 import '../utils/time_helper.dart';
 import '../screens/property_form_screen.dart';
-import '../screens/owner_form_screen.dart';
+import '../screens/owner_list_screen.dart'; // ⚠️ Owner List သို့ သွားရန် Import အသစ်
 import '../db/database_helper.dart';
 
 class PropertyMiniCard extends StatelessWidget {
@@ -30,7 +30,6 @@ class PropertyMiniCard extends StatelessWidget {
     return Colors.grey;
   }
 
-  // ⚠️ Share လုပ်ရန် Function (သတ်မှတ်ထားသော အချက် ၅ ချက်သာ ပါဝင်မည်)
   void _shareProperty() {
     final title = property['title'] ?? 'ခေါင်းစဉ်မရှိ';
     final price = '${property['asking_price_lakhs'] ?? 0} သိန်း';
@@ -83,7 +82,6 @@ $title
                         itemBuilder: (context, index) {
                           return GestureDetector(
                             onTap: () {
-                              // ⚠️ Full Screen Viewer သို့ ဓာတ်ပုံစာရင်းလုံးနှင့် လက်ရှိ index ကို ပို့ပေးမည်
                               Navigator.push(
                                 context, 
                                 MaterialPageRoute(builder: (_) => FullScreenImageViewer(photos: photos, initialIndex: index))
@@ -126,7 +124,6 @@ $title
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // ⚠️ Share ခလုတ် ထပ်တိုးထားသည်
                           IconButton(
                             onPressed: _shareProperty,
                             icon: const Icon(Icons.share, color: Colors.blue),
@@ -156,8 +153,7 @@ $title
                   
                   Text('${property['east_ft'] ?? 0} | ${property['west_ft'] ?? 0} | ${property['south_ft'] ?? 0} | ${property['north_ft'] ?? 0}', style: const TextStyle(fontSize: 16, letterSpacing: 1.5)),
                   const SizedBox(height: 24),
-                  
-                  Row(
+                                    Row(
                     children: [
                       Expanded(
                         flex: 3,
@@ -168,15 +164,10 @@ $title
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                           ),
-                          onPressed: () async {
-                            if (property['owner_id'] != null) {
-                              final ownerData = await DatabaseHelper.instance.getAllOwners();
-                              final owner = ownerData.firstWhere((o) => o['id'] == property['owner_id'], orElse: () => {});
-                              if (owner.isNotEmpty && ctx.mounted) {
-                                Navigator.pop(ctx);
-                                Navigator.push(context, MaterialPageRoute(builder: (_) => OwnerFormScreen(editData: owner)));
-                              }
-                            }
+                          onPressed: () {
+                            // ⚠️ Form ဆီ မသွားတော့ဘဲ Owner List စာမျက်နှာသို့သာ Redirect လုပ်မည်
+                            Navigator.pop(ctx);
+                            Navigator.push(context, MaterialPageRoute(builder: (_) => const OwnerListScreen()));
                           },
                           child: const Text('OWNER', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1.0)),
                         ),
@@ -236,7 +227,8 @@ $title
       );
     }
   }
-    @override
+
+  @override
   Widget build(BuildContext context) {
     List<String> photos = [];
     if (property['extra_data'] != null) {
@@ -327,7 +319,6 @@ $title
   }
 }
 
-// ⚠️ ဓာတ်ပုံများကို မျက်နှာပြင်အပြည့်ဖြင့် ပွတ်ဆွဲ (Swipe) နှင့် ချဲ့ (Zoom) ကြည့်နိုင်သော Class
 class FullScreenImageViewer extends StatefulWidget {
   final List<String> photos;
   final int initialIndex;
@@ -362,7 +353,6 @@ class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         iconTheme: const IconThemeData(color: Colors.white),
-        // ပုံအရေအတွက် ဘယ်လောက်ရှိသည်ကို ပြသမည် (ဥပမာ - 1 / 3)
         title: Text(
           '${_currentIndex + 1} / ${widget.photos.length}', 
           style: const TextStyle(color: Colors.white, fontSize: 16)
