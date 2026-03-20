@@ -247,7 +247,6 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
     );
   }
 
-  // ⚠️ Add New စာသားကို စိတ်ကြိုက်ပြောင်းနိုင်ရန် addTextLabel ကို ထည့်သွင်းထားသည်
   Widget _buildDropdown(String label, String? value, List<String> items, Function(String?) onChanged, {String? addCategory, String? addTextLabel, double fontSize = 13}) {
     final theme = Theme.of(context);
     final validValue = (value != null && items.contains(value)) ? value : null;
@@ -351,10 +350,8 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
 
               Row(
                 children: [
-                  // ⚠️ လမ်းအမျိုးအစား ဆိုပြီး ရှည်မနေစေရန် "လမ်း အသစ်ထည့်မည်" ဟု ပြင်ဆင်ထားသည်
                   Expanded(child: _buildDropdown('လမ်းအမျိုးအစား', _roadType, _roadTypes, (v) => setState(() => _roadType = v), addCategory: 'road_type', addTextLabel: 'လမ်း အသစ်ထည့်မည်')),
                   const SizedBox(width: 12),
-                  // ⚠️ မြေအမျိုးအစား ဆိုပြီး ရှည်မနေစေရန် "မြေ အသစ်ထည့်မည်" ဟု ပြင်ဆင်ထားသည်
                   Expanded(child: _buildDropdown('မြေအမျိုးအစား', _landType, _landTypes, (v) => setState(() => _landType = v), addCategory: 'land_type', addTextLabel: 'မြေ အသစ်ထည့်မည်')),
                 ],
               ),
@@ -454,7 +451,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
               ),
               const SizedBox(height: 16),
 
-              // ⚠️ Beta 1 မှ Google Map Icon ကို ပြန်လည်ထည့်သွင်းပေးထားသည်
+              // ⚠️ Map Link မရှိပါကလည်း Google Maps ကို တိုက်ရိုက်ဖွင့်ပေးမည့် စနစ်
               _buildTextField(
                 _mapLinkCtrl, 
                 'Google Map Link (Optional)', 
@@ -463,13 +460,17 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
                   icon: const Icon(Icons.map, color: Colors.blue),
                   onPressed: () async {
                     final url = _mapLinkCtrl.text.trim();
-                    final uri = url.isNotEmpty && url.startsWith('http') 
+                    // Link အမှန်ဖြစ်လျှင် ၎င်းကိုဖွင့်မည်၊ မဟုတ်လျှင် Map App ကို အလွတ်ဖွင့်မည်
+                    final uri = url.isNotEmpty && (url.startsWith('http://') || url.startsWith('https://'))
                         ? Uri.parse(url) 
-                        : Uri.parse('https://maps.google.com');
-                    if (await canLaunchUrl(uri)) {
+                        : Uri.parse('https://www.google.com/maps'); 
+                    
+                    try {
                       await launchUrl(uri, mode: LaunchMode.externalApplication);
-                    } else {
-                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Map ဖွင့်၍ မရပါ')));
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Map ဖွင့်၍ မရပါ')));
+                      }
                     }
                   },
                 ),
