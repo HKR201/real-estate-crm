@@ -291,8 +291,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
       },
     );
   }
-
-  @override
+    @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
@@ -440,7 +439,6 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
                       ),
                     );
                   },
-                  // ⚠️ Syntax Error ဖြစ်ခဲ့သော အပိုင်းကို အမှားကင်းစွာ ပြန်လည်ရေးသားထားသည်
                   fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
                     return TextFormField(
                       controller: textEditingController,
@@ -478,4 +476,81 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
               TextFormField(
                 controller: _remarkCtrl,
                 maxLines: 3,
-                style: c
+                style: const TextStyle(fontSize: 14),
+                decoration: InputDecoration(
+                  labelText: 'မှတ်ချက်',
+                  labelStyle: const TextStyle(fontSize: 14),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  contentPadding: const EdgeInsets.all(12),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('ဓာတ်ပုံများ', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                  TextButton.icon(
+                    onPressed: _showImagePickerOptions,
+                    icon: const Icon(Icons.add_a_photo, size: 18),
+                    label: const Text('ထည့်မည်'),
+                  ),
+                ],
+              ),
+              if (_photos.isNotEmpty)
+                Container(
+                  height: 100,
+                  margin: const EdgeInsets.only(top: 8),
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _photos.length,
+                    itemBuilder: (ctx, i) {
+                      return Stack(
+                        children: [
+                          Container(
+                            margin: const EdgeInsets.only(right: 8),
+                            width: 100,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8),
+                              image: DecorationImage(
+                                image: _photos[i].startsWith('http') ? NetworkImage(_photos[i]) : FileImage(File(_photos[i])) as ImageProvider,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            top: 4, right: 12,
+                            child: InkWell(
+                              onTap: () => setState(() => _photos.removeAt(i)),
+                              child: Container(
+                                padding: const EdgeInsets.all(2),
+                                decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                                child: const Icon(Icons.close, size: 14, color: Colors.white),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              
+              const SizedBox(height: 32),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 50),
+                  backgroundColor: const Color(0xFF2E6561),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: _isSaving ? null : _saveProperty,
+                child: const Text('သိမ်းဆည်းမည်', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+              ),
+              const SizedBox(height: 32),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
