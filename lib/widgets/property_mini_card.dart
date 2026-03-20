@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:share_plus/share_plus.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:url_launcher/url_launcher.dart';
@@ -29,6 +30,25 @@ class PropertyMiniCard extends StatelessWidget {
     return Colors.grey;
   }
 
+  // ⚠️ Share လုပ်ရန် Function (သတ်မှတ်ထားသော အချက် ၅ ချက်သာ ပါဝင်မည်)
+  void _shareProperty() {
+    final title = property['title'] ?? 'ခေါင်းစဉ်မရှိ';
+    final price = '${property['asking_price_lakhs'] ?? 0} သိန်း';
+    final area = '${property['east_ft'] ?? 0} x ${property['west_ft'] ?? 0} x ${property['south_ft'] ?? 0} x ${property['north_ft'] ?? 0} ပေ';
+    final location = property['location_id'] ?? '-';
+    final road = property['road_type'] ?? '-';
+
+    final String shareText = '''
+$title
+ဈေးနှုန်း - $price
+အကျယ်အဝန်း - $area
+နေရာ - $location
+လမ်းအမျိုးအစား - $road
+'''.trim();
+
+    Share.share(shareText);
+  }
+
   void _showPropertyDetails(BuildContext context, List<String> photos) {
     final theme = Theme.of(context);
     
@@ -47,7 +67,6 @@ class PropertyMiniCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Top Drag Handle
                   Center(
                     child: Container(
                       width: 40, height: 4,
@@ -56,7 +75,6 @@ class PropertyMiniCard extends StatelessWidget {
                     ),
                   ),
                   
-                  // ⚠️ Image Section (PageView ဖြင့် ပုံများစွာကို ပွတ်ဆွဲကြည့်နိုင်သည်)
                   if (photos.isNotEmpty)
                     SizedBox(
                       height: 220,
@@ -65,10 +83,10 @@ class PropertyMiniCard extends StatelessWidget {
                         itemBuilder: (context, index) {
                           return GestureDetector(
                             onTap: () {
-                              // ⚠️ ပုံကိုနှိပ်လျှင် Full Screen ချဲ့ကြည့်နိုင်မည်
+                              // ⚠️ Full Screen Viewer သို့ ဓာတ်ပုံစာရင်းလုံးနှင့် လက်ရှိ index ကို ပို့ပေးမည်
                               Navigator.push(
                                 context, 
-                                MaterialPageRoute(builder: (_) => FullScreenImageViewer(imagePath: photos[index]))
+                                MaterialPageRoute(builder: (_) => FullScreenImageViewer(photos: photos, initialIndex: index))
                               );
                             },
                             child: ClipRRect(
@@ -86,7 +104,6 @@ class PropertyMiniCard extends StatelessWidget {
                       child: const Icon(Icons.image_not_supported, size: 50, color: Colors.grey),
                     ),
                   
-                  // ပုံအများကြီးပါလျှင် အစက်လေးများ ပြရန်
                   if (photos.length > 1)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
@@ -97,7 +114,6 @@ class PropertyMiniCard extends StatelessWidget {
                   
                   const SizedBox(height: 16),
                   
-                  // Title & Map Icon
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -107,50 +123,42 @@ class PropertyMiniCard extends StatelessWidget {
                           style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                         ),
                       ),
-                      if (property['map_link'] != null && property['map_link'].toString().isNotEmpty)
-                        IconButton(
-                          onPressed: () async {
-                            try {
-                              await launchUrl(Uri.parse(property['map_link']), mode: LaunchMode.externalApplication);
-                            } catch (_) {}
-                          },
-                          icon: const Icon(Icons.map, color: Colors.blue),
-                        ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // ⚠️ Share ခလုတ် ထပ်တိုးထားသည်
+                          IconButton(
+                            onPressed: _shareProperty,
+                            icon: const Icon(Icons.share, color: Colors.blue),
+                          ),
+                          if (property['map_link'] != null && property['map_link'].toString().isNotEmpty)
+                            IconButton(
+                              onPressed: () async {
+                                try {
+                                  await launchUrl(Uri.parse(property['map_link']), mode: LaunchMode.externalApplication);
+                                } catch (_) {}
+                              },
+                              icon: const Icon(Icons.map, color: Colors.blue),
+                            ),
+                        ],
+                      ),
                     ],
                   ),
                   
-                  // Time
-                  Text(
-                    TimeHelper.getRelativeTime(property['updated_at']),
-                    style: const TextStyle(color: Colors.grey, fontSize: 13),
-                  ),
+                  Text(TimeHelper.getRelativeTime(property['updated_at']), style: const TextStyle(color: Colors.grey, fontSize: 13)),
                   const SizedBox(height: 8),
                   
-                  // Location details
-                  Text(
-                    '${property['location_id'] ?? 'Unknown'} • ${property['road_type'] ?? '-'}',
-                    style: const TextStyle(color: Colors.grey, fontSize: 15),
-                  ),
+                  Text('${property['location_id'] ?? 'Unknown'} • ${property['road_type'] ?? '-'}', style: const TextStyle(color: Colors.grey, fontSize: 15)),
                   const SizedBox(height: 12),
                   
-                  // Price
-                  Text(
-                    '${property['asking_price_lakhs']} သိန်း',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: theme.colorScheme.primary),
-                  ),
+                  Text('${property['asking_price_lakhs']} သိန်း', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
                   const SizedBox(height: 8),
                   
-                  // Dimensions
-                  Text(
-                    '${property['east_ft'] ?? 0} | ${property['west_ft'] ?? 0} | ${property['south_ft'] ?? 0} | ${property['north_ft'] ?? 0}',
-                    style: const TextStyle(fontSize: 16, letterSpacing: 1.5),
-                  ),
+                  Text('${property['east_ft'] ?? 0} | ${property['west_ft'] ?? 0} | ${property['south_ft'] ?? 0} | ${property['north_ft'] ?? 0}', style: const TextStyle(fontSize: 16, letterSpacing: 1.5)),
                   const SizedBox(height: 24),
                   
-                  // Action Buttons (Beta 1 Design)
                   Row(
                     children: [
-                      // OWNER Button
                       Expanded(
                         flex: 3,
                         child: ElevatedButton(
@@ -174,8 +182,6 @@ class PropertyMiniCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      
-                      // Edit Button
                       Expanded(
                         flex: 3,
                         child: OutlinedButton(
@@ -194,8 +200,6 @@ class PropertyMiniCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      
-                      // Delete Button
                       IconButton(
                         onPressed: () {
                           Navigator.pop(ctx);
@@ -215,35 +219,24 @@ class PropertyMiniCard extends StatelessWidget {
     );
   }
 
-  // ⚠️ Image Error ရှင်းလင်းထားသော Function
   Widget _buildImage(String imagePath) {
     if (imagePath.startsWith('http')) {
       return CachedNetworkImage(
         imageUrl: imagePath,
-        width: double.infinity,
-        height: 220,
-        fit: BoxFit.cover,
+        width: double.infinity, height: 220, fit: BoxFit.cover,
         placeholder: (context, url) => Container(color: Colors.grey.shade100, child: const Center(child: CircularProgressIndicator())),
         errorWidget: (context, url, error) => Container(color: Colors.grey.shade200, child: const Icon(Icons.broken_image, color: Colors.grey, size: 50)),
       );
     } else {
       final file = File(imagePath);
-      // ပုံဖိုင် တကယ်မရှိပါက Error မတက်စေရန် စစ်ဆေးခြင်း
-      if (!file.existsSync()) {
-        return Container(color: Colors.grey.shade200, child: const Icon(Icons.image_not_supported, color: Colors.grey, size: 50));
-      }
+      if (!file.existsSync()) return Container(color: Colors.grey.shade200, child: const Icon(Icons.image_not_supported, color: Colors.grey, size: 50));
       return Image.file(
-        file,
-        width: double.infinity,
-        height: 220,
-        fit: BoxFit.cover,
-        // ⚠️ ဤနေရာမှ cacheWidth ကို ဖြုတ်လိုက်ပါပြီ (အချို့ဖုန်းများတွင် ပုံပျောက်သွားတတ်သောကြောင့်ဖြစ်သည်)
+        file, width: double.infinity, height: 220, fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) => Container(color: Colors.grey.shade200, child: const Icon(Icons.broken_image, color: Colors.grey, size: 50)),
       );
     }
   }
-
-  @override
+    @override
   Widget build(BuildContext context) {
     List<String> photos = [];
     if (property['extra_data'] != null) {
@@ -334,10 +327,33 @@ class PropertyMiniCard extends StatelessWidget {
   }
 }
 
-// ⚠️ ဓာတ်ပုံကို Full Screen ချဲ့ကြည့်ရန် Class အသစ် (Zoom ဆွဲကြည့်နိုင်သည်)
-class FullScreenImageViewer extends StatelessWidget {
-  final String imagePath;
-  const FullScreenImageViewer({super.key, required this.imagePath});
+// ⚠️ ဓာတ်ပုံများကို မျက်နှာပြင်အပြည့်ဖြင့် ပွတ်ဆွဲ (Swipe) နှင့် ချဲ့ (Zoom) ကြည့်နိုင်သော Class
+class FullScreenImageViewer extends StatefulWidget {
+  final List<String> photos;
+  final int initialIndex;
+
+  const FullScreenImageViewer({super.key, required this.photos, required this.initialIndex});
+
+  @override
+  State<FullScreenImageViewer> createState() => _FullScreenImageViewerState();
+}
+
+class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
+  late PageController _pageController;
+  late int _currentIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+    _pageController = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -346,15 +362,42 @@ class FullScreenImageViewer extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.black,
         iconTheme: const IconThemeData(color: Colors.white),
-      ),
-      body: Center(
-        child: InteractiveViewer(
-          minScale: 0.5,
-          maxScale: 4.0, // လေးဆ အထိ Zoom ဆွဲချဲ့ကြည့်နိုင်မည်
-          child: imagePath.startsWith('http')
-              ? CachedNetworkImage(imageUrl: imagePath, fit: BoxFit.contain)
-              : Image.file(File(imagePath), fit: BoxFit.contain),
+        // ပုံအရေအတွက် ဘယ်လောက်ရှိသည်ကို ပြသမည် (ဥပမာ - 1 / 3)
+        title: Text(
+          '${_currentIndex + 1} / ${widget.photos.length}', 
+          style: const TextStyle(color: Colors.white, fontSize: 16)
         ),
+        centerTitle: true,
+      ),
+      body: PageView.builder(
+        controller: _pageController,
+        itemCount: widget.photos.length,
+        onPageChanged: (index) {
+          setState(() {
+            _currentIndex = index;
+          });
+        },
+        itemBuilder: (context, index) {
+          final imagePath = widget.photos[index];
+          return Center(
+            child: InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 4.0,
+              child: imagePath.startsWith('http')
+                  ? CachedNetworkImage(
+                      imageUrl: imagePath, 
+                      fit: BoxFit.contain,
+                      placeholder: (context, url) => const Center(child: CircularProgressIndicator(color: Colors.white)),
+                      errorWidget: (context, url, error) => const Icon(Icons.broken_image, color: Colors.white, size: 50),
+                    )
+                  : Image.file(
+                      File(imagePath), 
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) => const Icon(Icons.broken_image, color: Colors.white, size: 50),
+                    ),
+            ),
+          );
+        },
       ),
     );
   }
