@@ -141,8 +141,8 @@ class _OwnerListScreenState extends State<OwnerListScreen> {
                           final owner = _filteredOwners[index];
                           final isHighlighted = owner['id'] == widget.highlightOwnerId;
                           
-                          // ⚠️ Database မှန်ကန်စေရန် phone ဟု ပြန်ပြင်ထားသည်
-                          final String rawPhone = (owner['phone'] ?? '').toString().trim();
+                          // ⚠️ Database မှန်ကန်စေရန် phone_1 သို့ ပြန်ပြင်ထားပါသည်
+                          final String rawPhone = (owner['phone_1'] ?? '').toString().trim();
 
                           final highlightBgColor = isDark 
                               ? theme.colorScheme.primary.withOpacity(0.15) 
@@ -217,7 +217,6 @@ class _OwnerListScreenState extends State<OwnerListScreen> {
           ),
         ],
       ),
-      // ⚠️ Add Icon (+) ကို Main Page အရောင်အတိုင်း ပြောင်းလဲထားသည်
       floatingActionButton: FloatingActionButton(
         backgroundColor: const Color(0xFF2E6561),
         foregroundColor: Colors.white,
