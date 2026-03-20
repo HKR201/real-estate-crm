@@ -165,9 +165,16 @@ $title
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                           ),
                           onPressed: () {
-                            // ⚠️ Form ဆီ မသွားတော့ဘဲ Owner List စာမျက်နှာသို့သာ Redirect လုပ်မည်
                             Navigator.pop(ctx);
-                            Navigator.push(context, MaterialPageRoute(builder: (_) => const OwnerListScreen()));
+                            // ⚠️ ပိုင်ရှင် ID ရှိပါက OwnerListScreen သို့ Highlight ပြရန် လှမ်းပို့မည်
+                            if (property['owner_id'] != null) {
+                              Navigator.push(
+                                context, 
+                                MaterialPageRoute(builder: (_) => OwnerListScreen(highlightOwnerId: property['owner_id']))
+                              );
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ပိုင်ရှင် သတ်မှတ်ထားခြင်း မရှိပါ')));
+                            }
                           },
                           child: const Text('OWNER', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1.0)),
                         ),
