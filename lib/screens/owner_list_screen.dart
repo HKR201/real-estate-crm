@@ -68,7 +68,6 @@ class _OwnerListScreenState extends State<OwnerListScreen> {
     }
   }
 
-  // ⚠️ ဖုန်းနံပါတ် အများကြီးရှိပါက ရွေးချယ်ရန် Bottom Sheet ပြသမည့် Function
   void _showPhoneSelection(BuildContext context, List<String> phones) {
     showModalBottomSheet(
       context: context,
@@ -142,7 +141,8 @@ class _OwnerListScreenState extends State<OwnerListScreen> {
                           final owner = _filteredOwners[index];
                           final isHighlighted = owner['id'] == widget.highlightOwnerId;
                           
-                          final String rawPhone = (owner['phone_1'] ?? '').toString().trim();
+                          // ⚠️ Database မှန်ကန်စေရန် phone ဟု ပြန်ပြင်ထားသည်
+                          final String rawPhone = (owner['phone'] ?? '').toString().trim();
 
                           final highlightBgColor = isDark 
                               ? theme.colorScheme.primary.withOpacity(0.15) 
@@ -185,7 +185,6 @@ class _OwnerListScreenState extends State<OwnerListScreen> {
                                     IconButton(
                                       icon: const Icon(Icons.phone, color: Colors.green),
                                       onPressed: () {
-                                        // ⚠️ ကော်မာ (,), မျဉ်းစောင်း (/), နှင့် မြန်မာကော်မာ (၊) တို့ဖြင့် ဖုန်းနံပါတ်များကို ခွဲထုတ်မည်
                                         final phoneList = rawPhone
                                             .split(RegExp(r'[,/၊]'))
                                             .map((e) => e.trim())
@@ -193,10 +192,8 @@ class _OwnerListScreenState extends State<OwnerListScreen> {
                                             .toList();
 
                                         if (phoneList.length > 1) {
-                                          // ဖုန်း ၁ ခု ထက်ပိုပါက Bottom Sheet ပြမည်
                                           _showPhoneSelection(context, phoneList);
                                         } else if (phoneList.isNotEmpty) {
-                                          // ၁ ခုတည်းဆိုပါက တိုက်ရိုက် ခေါ်မည်
                                           _callPhone(phoneList.first);
                                         }
                                       },
@@ -220,7 +217,10 @@ class _OwnerListScreenState extends State<OwnerListScreen> {
           ),
         ],
       ),
+      // ⚠️ Add Icon (+) ကို Main Page အရောင်အတိုင်း ပြောင်းလဲထားသည်
       floatingActionButton: FloatingActionButton(
+        backgroundColor: const Color(0xFF2E6561),
+        foregroundColor: Colors.white,
         onPressed: () async {
           final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => const OwnerFormScreen()));
           if (result == true) _loadOwners();
