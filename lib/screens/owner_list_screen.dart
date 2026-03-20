@@ -29,10 +29,8 @@ class _OwnerListScreenState extends State<OwnerListScreen> {
     
     try {
       final rawData = await DatabaseHelper.instance.getAllOwners();
-      // ⚠️ အရေးကြီး: Read-only error မတက်စေရန် Modifiable List အဖြစ် ပြောင်းခြင်း
       final List<Map<String, dynamic>> data = List<Map<String, dynamic>>.from(rawData);
 
-      // Highlight လုပ်မည့်သူကို ထိပ်ဆုံးသို့ ဆွဲတင်မည်
       if (widget.highlightOwnerId != null) {
         final index = data.indexWhere((o) => o['id'] == widget.highlightOwnerId);
         if (index != -1) {
@@ -64,10 +62,40 @@ class _OwnerListScreenState extends State<OwnerListScreen> {
   }
 
   void _callPhone(String phone) async {
-    final Uri launchUri = Uri(scheme: 'tel', path: phone);
+    final Uri launchUri = Uri(scheme: 'tel', path: phone.trim());
     if (await canLaunchUrl(launchUri)) {
       await launchUrl(launchUri);
     }
+  }
+
+  // ⚠️ ဖုန်းနံပါတ် အများကြီးရှိပါက ရွေးချယ်ရန် Bottom Sheet ပြသမည့် Function
+  void _showPhoneSelection(BuildContext context, List<String> phones) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text('ဖုန်းခေါ်ဆိုမည့် နံပါတ်ကို ရွေးချယ်ပါ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+              const Divider(height: 1),
+              ...phones.map((phone) => ListTile(
+                    leading: const Icon(Icons.phone, color: Colors.green),
+                    title: Text(phone, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _callPhone(phone);
+                    },
+                  )).toList(),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -113,8 +141,9 @@ class _OwnerListScreenState extends State<OwnerListScreen> {
                         itemBuilder: (context, index) {
                           final owner = _filteredOwners[index];
                           final isHighlighted = owner['id'] == widget.highlightOwnerId;
+                          
+                          final String rawPhone = (owner['phone_1'] ?? '').toString().trim();
 
-                          // ⚠️ Minimalist Highlight အရောင်သတ်မှတ်ချက်များ
                           final highlightBgColor = isDark 
                               ? theme.colorScheme.primary.withOpacity(0.15) 
                               : theme.colorScheme.primary.withOpacity(0.05);
@@ -124,7 +153,7 @@ class _OwnerListScreenState extends State<OwnerListScreen> {
 
                           return Card(
                             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                            elevation: 0, // Minimalist ဖြစ်စေရန် အရိပ်ဖျောက်ထားသည်
+                            elevation: 0, 
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                               side: BorderSide(color: borderColor, width: 1.0),
@@ -144,15 +173,33 @@ class _OwnerListScreenState extends State<OwnerListScreen> {
                               ),
                               subtitle: Padding(
                                 padding: const EdgeInsets.only(top: 4),
-                                child: Text(owner['phone'] ?? 'ဖုန်းနံပါတ် မရှိပါ'),
+                                child: Text(
+                                  rawPhone.isNotEmpty ? rawPhone : 'ဖုန်းနံပါတ် မရှိပါ',
+                                  style: TextStyle(color: rawPhone.isNotEmpty ? theme.textTheme.bodyMedium?.color : Colors.grey),
+                                ),
                               ),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  if (owner['phone'] != null && owner['phone'].toString().isNotEmpty)
+                                  if (rawPhone.isNotEmpty)
                                     IconButton(
                                       icon: const Icon(Icons.phone, color: Colors.green),
-                                      onPressed: () => _callPhone(owner['phone']),
+                                      onPressed: () {
+                                        // ⚠️ ကော်မာ (,), မျဉ်းစောင်း (/), နှင့် မြန်မာကော်မာ (၊) တို့ဖြင့် ဖုန်းနံပါတ်များကို ခွဲထုတ်မည်
+                                        final phoneList = rawPhone
+                                            .split(RegExp(r'[,/၊]'))
+                                            .map((e) => e.trim())
+                                            .where((e) => e.isNotEmpty)
+                                            .toList();
+
+                                        if (phoneList.length > 1) {
+                                          // ဖုန်း ၁ ခု ထက်ပိုပါက Bottom Sheet ပြမည်
+                                          _showPhoneSelection(context, phoneList);
+                                        } else if (phoneList.isNotEmpty) {
+                                          // ၁ ခုတည်းဆိုပါက တိုက်ရိုက် ခေါ်မည်
+                                          _callPhone(phoneList.first);
+                                        }
+                                      },
                                     ),
                                   IconButton(
                                     icon: const Icon(Icons.edit, color: Colors.blue),
