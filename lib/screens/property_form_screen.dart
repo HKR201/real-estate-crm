@@ -27,7 +27,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
   final _mapLinkCtrl = TextEditingController();
   final _ownerSearchCtrl = TextEditingController();
 
-  String _propertyType = 'ခြံသီးသန့်'; // Default
+  String _propertyType = 'ခြံသီးသန့်';
   String _status = 'Available';
   String? _houseType;
   String? _locationId;
@@ -37,6 +37,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
 
   List<String> _photos = [];
   bool _isSaving = false;
+  bool _isLoading = true; // ⚠️ UI မပွင့်ခင် Data အားလုံး အသင့်ဖြစ်ရန် Loading State ထည့်ထားသည်
 
   List<String> _locations = [];
   List<String> _roadTypes = [];
@@ -44,39 +45,26 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
   List<String> _houseTypes = [];
   List<Map<String, dynamic>> _owners = [];
 
-  // အမျိုးအစား ၂ ခုသာ ကန့်သတ်ထားသည်
   final List<String> _propertyTypes = ['ခြံသီးသန့်', 'အိမ်အပါ'];
   final List<String> _statusList = ['Available', 'Pending', 'Sold Out'];
 
   @override
   void initState() {
     super.initState();
-    _loadMetadata();
+    _initializeData();
+  }
+
+  // ⚠️ Edit Data များကို အရင်ဆွဲထည့်ပြီးမှ Metadata များကို ဆက်ဆွဲမည်
+  Future<void> _initializeData() async {
     if (widget.editData != null) {
       _loadEditData(widget.editData!);
     }
-  }
-
-  Future<void> _loadMetadata() async {
-    final locs = await DatabaseHelper.instance.getMetadata('location');
-    final roads = await DatabaseHelper.instance.getMetadata('road_type');
-    final lands = await DatabaseHelper.instance.getMetadata('land_type');
-    final houses = await DatabaseHelper.instance.getMetadata('house_type');
-    final owners = await DatabaseHelper.instance.getAllOwners();
-
-    setState(() {
-      _locations = locs;
-      _roadTypes = roads;
-      _landTypes = lands;
-      _houseTypes = houses;
-      _owners = owners;
-    });
-
-    if (_ownerId != null) {
-      final owner = _owners.where((o) => o['id'] == _ownerId).toList();
-      if (owner.isNotEmpty) {
-        _ownerSearchCtrl.text = owner.first['name'] ?? '';
-      }
+    await _loadMetadata();
+    
+    if (mounted) {
+      setState(() {
+        _isLoading = false; // အားလုံးပြီးမှ Form ကို ဖွင့်မည်
+      });
     }
   }
 
@@ -104,6 +92,39 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
         if (extra['photos'] != null) _photos = List<String>.from(extra['photos']);
         if (extra['property_type'] != null) _propertyType = extra['property_type'];
       } catch (_) {}
+    }
+  }
+
+  Future<void> _loadMetadata() async {
+    // 1. Metadata Table မှ သိမ်းထားသော Data များ
+    final locMeta = await DatabaseHelper.instance.getMetadata('location');
+    final roadMeta = await DatabaseHelper.instance.getMetadata('road_type');
+    final landMeta = await DatabaseHelper.instance.getMetadata('land_type');
+    final houseMeta = await DatabaseHelper.instance.getMetadata('house_type');
+
+    // 2. ⚠️ Properties Table တွင် အမှန်တကယ် သုံးထားသော Data များ (ပျောက်မသွားစေရန်)
+    final locDistinct = await DatabaseHelper.instance.getDistinctPropertyValues('location_id');
+    final roadDistinct = await DatabaseHelper.instance.getDistinctPropertyValues('road_type');
+    final landDistinct = await DatabaseHelper.instance.getDistinctPropertyValues('land_type');
+    final houseDistinct = await DatabaseHelper.instance.getDistinctPropertyValues('house_type');
+
+    final owners = await DatabaseHelper.instance.getAllOwners();
+
+    setState(() {
+      // ⚠️ Data ၂ မျိုးလုံးကို ပေါင်းပြီး၊ ထပ်နေသည်များကို Set ဖြင့် ရှင်းထုတ်ကာ Dropdown သို့ ပို့မည်
+      _locations = {...locMeta, ...locDistinct}.toList();
+      _roadTypes = {...roadMeta, ...roadDistinct}.toList();
+      _landTypes = {...landMeta, ...landDistinct}.toList();
+      _houseTypes = {...houseMeta, ...houseDistinct}.toList();
+      _owners = owners;
+    });
+
+    // ⚠️ ပိုင်ရှင် ID ရှိပါက Autocomplete တွင် အလိုလို ပေါ်နေစေရန် Text ဖြည့်ပေးခြင်း
+    if (_ownerId != null) {
+      final owner = _owners.where((o) => o['id'] == _ownerId).toList();
+      if (owner.isNotEmpty) {
+        _ownerSearchCtrl.text = owner.first['name'] ?? '';
+      }
     }
   }
 
@@ -168,12 +189,10 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
     }
   }
 
-  // ⚠️ အပိုင်း (၂) ကို ဆက်လက်တင်ပြပါမည်
-    Future<void> _saveProperty() async {
+  Future<void> _saveProperty() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
 
-    // ⚠️ Logic: ခြံသီးသန့်ဖြစ်ပါက အိမ်အမျိုးအစားကို null ပြုလုပ်မည်
     final savedHouseType = _propertyType == 'ခြံသီးသန့်' ? null : _houseType;
 
     final extraData = jsonEncode({
@@ -194,7 +213,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
       'location_id': _locationId,
       'road_type': _roadType,
       'land_type': _landType,
-      'owner_id': _ownerId, // ⚠️ Auto-selected ID
+      'owner_id': _ownerId,
       'house_type': savedHouseType,
       'map_link': _mapLinkCtrl.text.trim(),
       'remark': _remarkCtrl.text.trim(),
@@ -218,8 +237,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
       setState(() => _isSaving = false);
     }
   }
-
-  Widget _buildTextField(TextEditingController ctrl, String label, {bool isNumber = false, double fontSize = 13, bool isRequired = false}) {
+    Widget _buildTextField(TextEditingController ctrl, String label, {bool isNumber = false, double fontSize = 13, bool isRequired = false}) {
     return TextFormField(
       controller: ctrl,
       keyboardType: isNumber ? TextInputType.number : TextInputType.text,
@@ -278,6 +296,13 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ⚠️ Loading ပြီးမှသာ UI ကို Render လုပ်မည် (Owner Name သေချာပေါက် ပေါ်လာရန်)
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     final theme = Theme.of(context);
 
     return GestureDetector(
@@ -340,7 +365,6 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
               ),
               const SizedBox(height: 16),
 
-              // ⚠️ အမျိုးအစား 'အိမ်အပါ' ဖြစ်မှသာ အိမ်အမျိုးအစား dropdown ကို ပြမည်
               if (_propertyType == 'အိမ်အပါ') ...[
                 _buildDropdown('အိမ်အမျိုးအစား', _houseType, _houseTypes, (v) => setState(() => _houseType = v), addCategory: 'house_type', fontSize: 14),
                 const SizedBox(height: 16),
@@ -364,14 +388,18 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
                       _ownerSearchCtrl.text = ''; 
                       final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => OwnerFormScreen(initialName: option['name'])));
                       if (result == true) {
+                        // ⚠️ ပိုင်ရှင်သစ် သိမ်းပြီးပြန်လာပါက Data ပြန်ခေါ်ပြီး အလိုလိုရွေးပေးမည်
+                        setState(() => _isLoading = true);
                         await _loadMetadata();
-                        // ⚠️ Logic: အသစ်ထည့်လိုက်သော ပိုင်ရှင်ကို အလိုလို ပြန်ရွေးပေးမည်
                         final newOwner = _owners.firstWhere((o) => o['name'] == option['name'], orElse: () => {});
                         if (newOwner.isNotEmpty) {
                           setState(() {
                             _ownerId = newOwner['id'];
                             _ownerSearchCtrl.text = newOwner['name'];
+                            _isLoading = false;
                           });
+                        } else {
+                          setState(() => _isLoading = false);
                         }
                       }
                     } else {
