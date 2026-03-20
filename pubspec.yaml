@@ -1,33 +1,50 @@
 name: real_estate_crm
-description: "A new Flutter project for Real Estate CRM."
+description: "A new Flutter project."
 publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: '>=3.2.3 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
-  cupertino_icons: ^1.0.6
-  supabase_flutter: ^2.5.4
-  uuid: ^4.4.0
-  sqflite: ^2.3.3
-  path: ^1.9.0
-  url_launcher: ^6.3.0
-  image_picker: ^1.1.2
-  image: ^4.1.4
+  cupertino_icons: ^1.0.2
+  supabase_flutter: ^2.3.1
+  sqflite: ^2.3.0
+  path: ^1.8.3
   path_provider: ^2.1.2
-  share_plus: ^10.1.0
-  file_picker: ^8.1.2
-  archive: ^3.6.1
-  shared_preferences: ^2.2.3 # <--- Setting များကို မှတ်သားထားရန်
+  image_picker: ^1.0.7
+  image: ^4.1.4
+  url_launcher: ^6.2.3
+  shared_preferences: ^2.2.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.4.1
 
 flutter:
   uses-material-design: true
-  
+  assets:
+    - assets/
+
+# ⚠️ App Icon သတ်မှတ်ချက်
+flutter_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/logo.jpg"
+  min_sdk_android: 21
+
+# ⚠️ Splash Screen သတ်မှတ်ချက်
+flutter_native_splash:
+  color: "#F5F8F8"
+  image: "assets/logo.jpg"
+  android: true
+  ios: true
+  android_12:
+    color: "#F5F8F8"
+    image: "assets/logo.jpg"
+    
