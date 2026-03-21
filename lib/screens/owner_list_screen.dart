@@ -97,6 +97,39 @@ class _OwnerListScreenState extends State<OwnerListScreen> {
     );
   }
 
+  // ⚠️ Soft Delete (အမှိုက်ပုံးသို့ပို့ရန်) Confirmation Dialog
+  void _confirmDelete(BuildContext context, Map<String, dynamic> owner) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('ဖျက်ရန် သေချာပါသလား?'),
+        content: Text('"${owner['name']}" ကို အမှိုက်ပုံးသို့ ပို့ပါမည်။'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('ပယ်ဖျက်'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              // Database ၏ moveToRecycleBin function ကို အသုံးပြု၍ Soft Delete လုပ်ခြင်း
+              await DatabaseHelper.instance.moveToRecycleBin('crm_owners', owner['id']);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('အမှိုက်ပုံးသို့ ပို့လိုက်ပါပြီ')));
+              }
+              _loadOwners(); // စာရင်းကို ပြန်လည် Refresh လုပ်မည်
+            },
+            child: const Text('ဖျက်မည်'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -141,7 +174,6 @@ class _OwnerListScreenState extends State<OwnerListScreen> {
                           final owner = _filteredOwners[index];
                           final isHighlighted = owner['id'] == widget.highlightOwnerId;
                           
-                          // ⚠️ Database မှန်ကန်စေရန် phones ဟု ပြင်ထားသည်
                           final String rawPhone = (owner['phones'] ?? '').toString().trim();
 
                           final highlightBgColor = isDark 
@@ -207,6 +239,11 @@ class _OwnerListScreenState extends State<OwnerListScreen> {
                                       );
                                       if (result == true) _loadOwners();
                                     },
+                                  ),
+                                  // ⚠️ Delete ခလုတ် အသစ်
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                    onPressed: () => _confirmDelete(context, owner),
                                   ),
                                 ],
                               ),
