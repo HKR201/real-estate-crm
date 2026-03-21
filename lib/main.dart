@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; 
 import 'dart:convert'; 
-import 'dart:io'; // Internet check အတွက်
+import 'dart:io'; 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart'; 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -31,7 +31,6 @@ void main() async {
   else if (themeStr == 'dark') themeNotifier.value = ThemeMode.dark;
   else themeNotifier.value = ThemeMode.system;
 
-  // 2. Android 15 Modernization (Edge-to-Edge and transparent bars)
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     systemNavigationBarColor: Colors.transparent,
@@ -87,19 +86,23 @@ class _MainDashboardState extends State<MainDashboard> {
 
   List<Map<String, dynamic>> _properties = [];
   List<Map<String, dynamic>> _buyers = [];
+  List<Map<String, dynamic>> _owners = []; // ⚠️ ပိုင်ရှင်စာရင်းများကို သိမ်းထားရန် ထပ်တိုးထားသည်
   bool _isLoading = true; 
   bool _isLoadingBuyers = true;
   bool _isSearching = false;
   String _searchQuery = '';
 
+  // ⚠️ Filter Category တွင် "ပိုင်ရှင်" အား ထပ်တိုးထားပါသည်
   final Map<String, String> _filterCategories = {
     'asking_price_lakhs': 'ခေါ်ဈေးနှုန်း',
     'location_id': 'မြို့နယ်/တည်နေရာ',
     'road_type': 'လမ်းအမျိုးအစား',
     'house_type': 'အိမ်အမျိုးအစား',
     'land_type': 'မြေအမျိုးအစား',
+    'owner_id': 'ပိုင်ရှင်',
     'status': 'Status'
   };
+  
   String? _selectedFilterCategory;
   String? _selectedFilterValue;
   List<String> _currentSubFilterValues = [];
@@ -109,10 +112,10 @@ class _MainDashboardState extends State<MainDashboard> {
     super.initState(); 
     _loadProperties(); 
     _loadBuyers(); 
+    _loadOwners(); // ⚠️ Dashboard စဖွင့်သည်နှင့် ပိုင်ရှင်စာရင်းများကိုပါ ဆွဲထုတ်ထားမည်
     _triggerAutoSync(); 
   }
 
-  // 1. Memory Management (Critical)
   @override
   void dispose() {
     _searchController.dispose();
@@ -121,7 +124,6 @@ class _MainDashboardState extends State<MainDashboard> {
     super.dispose();
   }
 
-  // 3. Sync Logic Efficiency (Internet Check + 5-minute Cooldown)
   Future<void> _triggerAutoSync() async {
     try {
       final result = await InternetAddress.lookup('supabase.co');
@@ -130,11 +132,10 @@ class _MainDashboardState extends State<MainDashboard> {
         final lastSyncStr = prefs.getString('last_auto_sync');
         DateTime? lastSync = lastSyncStr != null ? DateTime.tryParse(lastSyncStr) : null;
         
-        // ၅ မိနစ်ကျော်မှသာ Sync ထပ်လုပ်မည်
         if (lastSync == null || DateTime.now().difference(lastSync).inMinutes >= 5) {
           await SyncService.autoSyncBackground();
           await prefs.setString('last_auto_sync', DateTime.now().toIso8601String());
-          if (mounted) { _loadProperties(); _loadBuyers(); }
+          if (mounted) { _loadProperties(); _loadBuyers(); _loadOwners(); }
         }
       }
     } catch (e) {
@@ -152,6 +153,12 @@ class _MainDashboardState extends State<MainDashboard> {
     setState(() => _isLoadingBuyers = true);
     final data = await DatabaseHelper.instance.getAllBuyers();
     if (mounted) setState(() { _buyers = List<Map<String, dynamic>>.from(data); _isLoadingBuyers = false; });
+  }
+
+  // ⚠️ ပိုင်ရှင်စာရင်းများကို Database မှ ဆွဲထုတ်သည့် Function အသစ်
+  Future<void> _loadOwners() async {
+    final data = await DatabaseHelper.instance.getAllOwners();
+    if (mounted) setState(() { _owners = List<Map<String, dynamic>>.from(data); });
   }
 
   void _showAutoCloseSnackBar(String message, VoidCallback? onUndo) {
@@ -198,8 +205,8 @@ class _MainDashboardState extends State<MainDashboard> {
                     decoration: BoxDecoration(color: Color(0xFF008080)), 
                     child: Text('CRM Options', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold))
                   ),
-                  ListTile(leading: const Icon(Icons.people), title: const Text('Owner List'), onTap: () async { Navigator.pop(context); await Navigator.push(context, MaterialPageRoute(builder: (context) => const OwnerListScreen())); _triggerAutoSync(); }),
-                  ListTile(leading: const Icon(Icons.delete_outline, color: Colors.red), title: const Text('Recycle Bin'), onTap: () async { Navigator.pop(context); await Navigator.push(context, MaterialPageRoute(builder: (context) => const RecycleBinScreen())); _loadProperties(); _loadBuyers(); }),
+                  ListTile(leading: const Icon(Icons.people), title: const Text('Owner List'), onTap: () async { Navigator.pop(context); await Navigator.push(context, MaterialPageRoute(builder: (context) => const OwnerListScreen())); _loadOwners(); _triggerAutoSync(); }),
+                  ListTile(leading: const Icon(Icons.delete_outline, color: Colors.red), title: const Text('Recycle Bin'), onTap: () async { Navigator.pop(context); await Navigator.push(context, MaterialPageRoute(builder: (context) => const RecycleBinScreen())); _loadProperties(); _loadBuyers(); _loadOwners(); }),
                   const Divider(),
                   ListTile(leading: const Icon(Icons.settings), title: const Text('Settings'), onTap: () async { Navigator.pop(context); await Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())); _loadProperties(); _loadBuyers(); }),
                 ],
@@ -238,17 +245,32 @@ class _MainDashboardState extends State<MainDashboard> {
   Widget _buildHomeTab() {
     if (_isLoading) return const Center(child: CircularProgressIndicator());
     List<Map<String, dynamic>> filteredProperties = _properties;
+    
+    // ⚠️ Filter လုပ်သည့် Logic ကို ပြင်ဆင်ထားသည်
     if (_selectedFilterCategory != null) {
       filteredProperties = _properties.where((p) {
+        // ၁။ ဈေးနှုန်းဖြင့် Filter စစ်ခြင်း
         if (_selectedFilterCategory == 'asking_price_lakhs') {
           int maxPrice = int.tryParse(_priceFilterController.text) ?? 0;
           if (maxPrice == 0) return true;
           return (p['asking_price_lakhs'] ?? 0) <= maxPrice;
         }
-        if (_selectedFilterValue != null) return p[_selectedFilterCategory] == _selectedFilterValue;
+        
+        // ၂။ ပိုင်ရှင်ဖြင့် Filter စစ်ခြင်း (အရေးကြီး: နာမည်အစား ID ဖြင့် တိုက်စစ်ရမည်)
+        if (_selectedFilterCategory == 'owner_id' && _selectedFilterValue != null) {
+          // Sub-filter တွင် ရွေးလိုက်သော ပိုင်ရှင်နာမည်နှင့် ကိုက်ညီသည့် ID များကို ရှာမည်
+          final matchingOwnerIds = _owners.where((o) => o['name'] == _selectedFilterValue).map((o) => o['id']).toList();
+          return matchingOwnerIds.contains(p['owner_id']);
+        }
+        
+        // ၃။ အခြား Category များဖြင့် Filter စစ်ခြင်း
+        if (_selectedFilterValue != null) {
+          return p[_selectedFilterCategory] == _selectedFilterValue;
+        }
         return true;
       }).toList();
     }
+
     return Column(children: [
       Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), color: Theme.of(context).cardColor, child: Row(children: [
         Expanded(flex: 5, child: DropdownButtonHideUnderline(child: DropdownButton<String>(
@@ -259,8 +281,16 @@ class _MainDashboardState extends State<MainDashboard> {
           items: _filterCategories.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value, style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis))).toList(), 
           onChanged: (v) async {
             setState(() { _selectedFilterCategory = v; _selectedFilterValue = null; _currentSubFilterValues = []; _priceFilterController.clear(); });
-            if (v == 'status') { _currentSubFilterValues = ['Available', 'Pending', 'Sold Out']; } 
-            else if (v != null && v != 'asking_price_lakhs') { _currentSubFilterValues = await DatabaseHelper.instance.getDistinctPropertyValues(v); }
+            
+            // ⚠️ Sub-filter တွင် ပေါ်ရမည့် Data များကို Category အလိုက် ဆွဲထုတ်ခြင်း
+            if (v == 'status') { 
+              _currentSubFilterValues = ['Available', 'Pending', 'Sold Out']; 
+            } else if (v == 'owner_id') {
+              // ပိုင်ရှင်ဖြစ်ပါက Name များကိုသာ Sub-filter တွင် ပြပေးမည် (ထပ်နေသည်များကို Set ဖြင့် ရှင်းမည်)
+              _currentSubFilterValues = _owners.map((o) => (o['name'] ?? '').toString()).toSet().toList();
+            } else if (v != null && v != 'asking_price_lakhs') { 
+              _currentSubFilterValues = await DatabaseHelper.instance.getDistinctPropertyValues(v); 
+            }
             setState(() {});
           }
         ))),
