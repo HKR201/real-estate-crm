@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../db/database_helper.dart';
 import '../main.dart';
 import '../services/sync_service.dart'; 
+import 'category_manager_screen.dart'; // ⚠️ Category Manager အသစ်ကို Import လုပ်ထားသည်
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -40,7 +41,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     else themeNotifier.value = ThemeMode.system;
   }
 
-  // --- Cloud သို့ တင်ခြင်း (Upload) ---
   Future<void> _startCloudSync() async {
     setState(() { _isProcessing = true; _statusMessage = "Cloud သို့ ဒေတာများ ပို့ဆောင်နေပါသည်..."; });
     try {
@@ -53,7 +53,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  // --- Cloud မှ ဆွဲချခြင်း (Download) ---
   Future<void> _startCloudDownload() async {
     setState(() { _isProcessing = true; _statusMessage = "Cloud မှ ဒေတာများ ရယူနေပါသည်..."; });
     try {
@@ -66,7 +65,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  // --- Offline Backup (ယခင်အတိုင်း) ---
   Future<void> _exportBackup() async {
     setState(() { _isProcessing = true; _statusMessage = "Backup ထုပ်ပိုးနေပါသည်..."; });
     try {
@@ -131,10 +129,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
               RadioListTile<String>(title: const Text('System Default'), value: 'system', groupValue: _currentTheme, onChanged: (v) => _updateTheme(v!)),
               RadioListTile<String>(title: const Text('Light Mode'), value: 'light', groupValue: _currentTheme, onChanged: (v) => _updateTheme(v!)),
               RadioListTile<String>(title: const Text('Dark Mode'), value: 'dark', groupValue: _currentTheme, onChanged: (v) => _updateTheme(v!)),
+              
+              const Divider(),
+              // ⚠️ Data Management အပိုင်း အသစ်ထည့်သွင်းခြင်း
+              const ListTile(title: Text('Data Management', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal))),
+              ListTile(
+                leading: const Icon(Icons.category_outlined, color: Colors.orange),
+                title: const Text('အမျိုးအစားများ စီမံရန် (Categories)'),
+                subtitle: const Text('မြို့နယ်၊ လမ်း၊ အိမ် အမျိုးအစားဟောင်းများ ဖျက်ရန်'),
+                onTap: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const CategoryManagerScreen()));
+                },
+              ),
+
               const Divider(),
               const ListTile(title: Text('Data Synchronization', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal))),
-              
-              // --- Upload / Download ခလုတ်များ ---
               ListTile(
                 leading: const Icon(Icons.cloud_upload, color: Colors.teal),
                 title: const Text('Upload to Cloud'),
