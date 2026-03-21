@@ -86,13 +86,12 @@ class _MainDashboardState extends State<MainDashboard> {
 
   List<Map<String, dynamic>> _properties = [];
   List<Map<String, dynamic>> _buyers = [];
-  List<Map<String, dynamic>> _owners = []; // ⚠️ ပိုင်ရှင်စာရင်းများကို သိမ်းထားရန် ထပ်တိုးထားသည်
+  List<Map<String, dynamic>> _owners = [];
   bool _isLoading = true; 
   bool _isLoadingBuyers = true;
   bool _isSearching = false;
   String _searchQuery = '';
 
-  // ⚠️ Filter Category တွင် "ပိုင်ရှင်" အား ထပ်တိုးထားပါသည်
   final Map<String, String> _filterCategories = {
     'asking_price_lakhs': 'ခေါ်ဈေးနှုန်း',
     'location_id': 'မြို့နယ်/တည်နေရာ',
@@ -110,9 +109,9 @@ class _MainDashboardState extends State<MainDashboard> {
   @override
   void initState() { 
     super.initState(); 
+    _loadOwners(); // ⚠️ ပိုင်ရှင်များကို အရင်ဆုံးဆွဲထုတ်ထားမည် (Filter လုပ်ချိန် အဆင်သင့်ဖြစ်စေရန်)
     _loadProperties(); 
     _loadBuyers(); 
-    _loadOwners(); // ⚠️ Dashboard စဖွင့်သည်နှင့် ပိုင်ရှင်စာရင်းများကိုပါ ဆွဲထုတ်ထားမည်
     _triggerAutoSync(); 
   }
 
@@ -155,7 +154,6 @@ class _MainDashboardState extends State<MainDashboard> {
     if (mounted) setState(() { _buyers = List<Map<String, dynamic>>.from(data); _isLoadingBuyers = false; });
   }
 
-  // ⚠️ ပိုင်ရှင်စာရင်းများကို Database မှ ဆွဲထုတ်သည့် Function အသစ်
   Future<void> _loadOwners() async {
     final data = await DatabaseHelper.instance.getAllOwners();
     if (mounted) setState(() { _owners = List<Map<String, dynamic>>.from(data); });
@@ -246,24 +244,19 @@ class _MainDashboardState extends State<MainDashboard> {
     if (_isLoading) return const Center(child: CircularProgressIndicator());
     List<Map<String, dynamic>> filteredProperties = _properties;
     
-    // ⚠️ Filter လုပ်သည့် Logic ကို ပြင်ဆင်ထားသည်
     if (_selectedFilterCategory != null) {
       filteredProperties = _properties.where((p) {
-        // ၁။ ဈေးနှုန်းဖြင့် Filter စစ်ခြင်း
         if (_selectedFilterCategory == 'asking_price_lakhs') {
           int maxPrice = int.tryParse(_priceFilterController.text) ?? 0;
           if (maxPrice == 0) return true;
           return (p['asking_price_lakhs'] ?? 0) <= maxPrice;
         }
         
-        // ၂။ ပိုင်ရှင်ဖြင့် Filter စစ်ခြင်း (အရေးကြီး: နာမည်အစား ID ဖြင့် တိုက်စစ်ရမည်)
-        if (_selectedFilterCategory == 'owner_id' && _selectedFilterValue != null) {
-          // Sub-filter တွင် ရွေးလိုက်သော ပိုင်ရှင်နာမည်နှင့် ကိုက်ညီသည့် ID များကို ရှာမည်
-          final matchingOwnerIds = _owners.where((o) => o['name'] == _selectedFilterValue).map((o) => o['id']).toList();
+        if (_selectedFilterCategory == 'owner_id' && _selectedFilterValue != null && _selectedFilterValue != 'ပိုင်ရှင် မရှိသေးပါ') {
+          final matchingOwnerIds = _owners.where((o) => (o['name'] ?? '').toString().trim() == _selectedFilterValue).map((o) => o['id']).toList();
           return matchingOwnerIds.contains(p['owner_id']);
         }
         
-        // ၃။ အခြား Category များဖြင့် Filter စစ်ခြင်း
         if (_selectedFilterValue != null) {
           return p[_selectedFilterCategory] == _selectedFilterValue;
         }
@@ -282,15 +275,21 @@ class _MainDashboardState extends State<MainDashboard> {
           onChanged: (v) async {
             setState(() { _selectedFilterCategory = v; _selectedFilterValue = null; _currentSubFilterValues = []; _priceFilterController.clear(); });
             
-            // ⚠️ Sub-filter တွင် ပေါ်ရမည့် Data များကို Category အလိုက် ဆွဲထုတ်ခြင်း
             if (v == 'status') { 
               _currentSubFilterValues = ['Available', 'Pending', 'Sold Out']; 
             } else if (v == 'owner_id') {
-              // ပိုင်ရှင်ဖြစ်ပါက Name များကိုသာ Sub-filter တွင် ပြပေးမည် (ထပ်နေသည်များကို Set ဖြင့် ရှင်းမည်)
-              _currentSubFilterValues = _owners.map((o) => (o['name'] ?? '').toString()).toSet().toList();
+              // ⚠️ ဖြေရှင်းချက်: အလွတ်များဖယ်ရှားခြင်းနှင့် ပိုင်ရှင်မရှိသေးပါက Fallback ပြသခြင်း
+              final ownerNames = _owners
+                  .map((o) => (o['name'] ?? '').toString().trim())
+                  .where((name) => name.isNotEmpty)
+                  .toSet()
+                  .toList();
+              
+              _currentSubFilterValues = ownerNames.isNotEmpty ? ownerNames : ['ပိုင်ရှင် မရှိသေးပါ'];
             } else if (v != null && v != 'asking_price_lakhs') { 
               _currentSubFilterValues = await DatabaseHelper.instance.getDistinctPropertyValues(v); 
             }
+            // Dropdown ချက်ချင်းပွင့်စေရန် setState အသေအချာ ပြန်ခေါ်ပေးခြင်း
             setState(() {});
           }
         ))),
