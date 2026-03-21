@@ -125,6 +125,16 @@ class _MainDashboardState extends State<MainDashboard> {
 
   Future<void> _triggerAutoSync() async {
     try {
+      final db = await DatabaseHelper.instance.database;
+      
+      // ⚠️ ပြင်ဆင်ချက် - Cloud ကို မပို့ခင် ဖုန်းထဲမှာ တကယ်ပဲ ပို့စရာ (is_synced = 0) ရှိမရှိ အရင်စစ်ဆေးမည်
+      final unsyncedProps = (await db.rawQuery('SELECT COUNT(*) as c FROM crm_properties WHERE is_synced = 0')).first['c'] as int;
+      final unsyncedOwners = (await db.rawQuery('SELECT COUNT(*) as c FROM crm_owners WHERE is_synced = 0')).first['c'] as int;
+      final unsyncedBuyers = (await db.rawQuery('SELECT COUNT(*) as c FROM crm_buyers WHERE is_synced = 0')).first['c'] as int;
+
+      // ပို့စရာဘာမှ မရှိရင် API လှမ်းမခေါ်ဘဲ ဒီနေရာမှာတင် ရပ်လိုက်မည် (Save Battery & API Limit)
+      if (unsyncedProps == 0 && unsyncedOwners == 0 && unsyncedBuyers == 0) return;
+
       final result = await InternetAddress.lookup('supabase.co');
       if (result.isNotEmpty && result[0].rawAddress.isNotEmpty) {
         final prefs = await SharedPreferences.getInstance();
