@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
-import 'package:url_launcher/url_launcher.dart'; // ⚠️ Map Icon နှိပ်လျှင် Google Map ဖွင့်ရန်
+import 'package:url_launcher/url_launcher.dart'; 
+import 'package:path_provider/path_provider.dart';
 import '../db/database_helper.dart';
 import 'owner_form_screen.dart';
 
@@ -36,7 +37,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
   String? _landType;
   String? _ownerId;
 
-  List<String> _photos = [];
+  List<String> _photos = []; // ယခု ဤထဲတွင် Filename (ဥပမာ image.jpg) များကိုသာ သိမ်းပါမည်
   bool _isSaving = false;
   bool _isLoading = true;
 
@@ -56,16 +57,9 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
   }
 
   Future<void> _initializeData() async {
-    if (widget.editData != null) {
-      _loadEditData(widget.editData!);
-    }
+    if (widget.editData != null) _loadEditData(widget.editData!);
     await _loadMetadata();
-    
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-      });
-    }
+    if (mounted) setState(() => _isLoading = false);
   }
 
   void _loadEditData(Map<String, dynamic> data) {
@@ -118,9 +112,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
 
     if (_ownerId != null) {
       final owner = _owners.where((o) => o['id'] == _ownerId).toList();
-      if (owner.isNotEmpty) {
-        _ownerSearchCtrl.text = owner.first['name'] ?? '';
-      }
+      if (owner.isNotEmpty) _ownerSearchCtrl.text = owner.first['name'] ?? '';
     }
   }
 
@@ -132,32 +124,35 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              leading: const Icon(Icons.camera_alt, color: Colors.blue),
-              title: const Text('ကင်မရာဖြင့် ရိုက်မည်'),
-              onTap: () { Navigator.pop(ctx); _pickImage(ImageSource.camera); },
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library, color: Colors.green),
-              title: const Text('Gallery မှ ရွေးမည်'),
-              onTap: () { Navigator.pop(ctx); _pickMultiImages(); },
-            ),
+            ListTile(leading: const Icon(Icons.camera_alt, color: Colors.blue), title: const Text('ကင်မရာဖြင့် ရိုက်မည်'), onTap: () { Navigator.pop(ctx); _pickImage(ImageSource.camera); }),
+            ListTile(leading: const Icon(Icons.photo_library, color: Colors.green), title: const Text('Gallery မှ ရွေးမည်'), onTap: () { Navigator.pop(ctx); _pickMultiImages(); }),
           ],
         ),
       ),
     );
   }
 
+  Future<void> _saveImageToAppDirectory(String tempPath) async {
+    final appDir = await getApplicationDocumentsDirectory();
+    final photosDir = Directory('${appDir.path}/property_photos');
+    if (!await photosDir.exists()) await photosDir.create(recursive: true);
+    
+    final fileName = tempPath.split('/').last;
+    final newPath = '${photosDir.path}/$fileName';
+    await File(tempPath).copy(newPath);
+    setState(() => _photos.add(fileName)); // File Name သီးသန့်သာ မှတ်ပါမည်
+  }
+
   Future<void> _pickImage(ImageSource source) async {
     final picker = ImagePicker();
     final image = await picker.pickImage(source: source, imageQuality: 80);
-    if (image != null) setState(() => _photos.add(image.path));
+    if (image != null) await _saveImageToAppDirectory(image.path);
   }
 
   Future<void> _pickMultiImages() async {
     final picker = ImagePicker();
     final images = await picker.pickMultiImage(imageQuality: 80);
-    if (images.isNotEmpty) setState(() => _photos.addAll(images.map((e) => e.path)));
+    for (var image in images) await _saveImageToAppDirectory(image.path);
   }
 
   Future<void> _addNewMetadata(String category, String title) async {
@@ -165,7 +160,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('$title', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        title: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         content: TextField(controller: ctrl, autofocus: true, decoration: const InputDecoration(border: OutlineInputBorder())),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ပယ်ဖျက်')),
@@ -229,20 +224,13 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
       setState(() => _isSaving = false);
     }
   }
-    // ⚠️ Suffix Icon ထည့်သွင်းနိုင်ရန် ပြင်ဆင်ထားသည်
+
   Widget _buildTextField(TextEditingController ctrl, String label, {bool isNumber = false, double fontSize = 13, bool isRequired = false, Widget? suffixIcon}) {
     return TextFormField(
       controller: ctrl,
       keyboardType: isNumber ? TextInputType.number : TextInputType.text,
       style: const TextStyle(fontSize: 14),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(fontSize: fontSize),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-        isDense: true,
-        suffixIcon: suffixIcon,
-      ),
+      decoration: InputDecoration(labelText: label, labelStyle: TextStyle(fontSize: fontSize), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14), isDense: true, suffixIcon: suffixIcon),
       validator: isRequired ? (v) => v == null || v.isEmpty ? 'လိုအပ်ပါသည်' : null : null,
     );
   }
@@ -253,48 +241,19 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
     final displayAddText = addTextLabel ?? '$label အသစ်ထည့်မည်';
 
     return DropdownButtonFormField<String>(
-      isExpanded: true,
-      value: validValue,
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(fontSize: fontSize),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        isDense: true,
-      ),
+      isExpanded: true, value: validValue,
+      decoration: InputDecoration(labelText: label, labelStyle: TextStyle(fontSize: fontSize), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12), isDense: true),
       items: [
-        ...items.map((e) => DropdownMenuItem(
-              value: e,
-              child: Text(e, style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis),
-            )),
-        if (addCategory != null)
-          DropdownMenuItem(
-            value: 'ADD_NEW',
-            child: Row(
-              children: [
-                Icon(Icons.add, size: 16, color: theme.colorScheme.primary),
-                const SizedBox(width: 6),
-                Text(displayAddText, style: TextStyle(color: theme.colorScheme.primary, fontSize: 13, fontWeight: FontWeight.w600)),
-              ],
-            ),
-          ),
+        ...items.map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis))),
+        if (addCategory != null) DropdownMenuItem(value: 'ADD_NEW', child: Row(children: [Icon(Icons.add, size: 16, color: theme.colorScheme.primary), const SizedBox(width: 6), Text(displayAddText, style: TextStyle(color: theme.colorScheme.primary, fontSize: 13, fontWeight: FontWeight.w600))])),
       ],
-      onChanged: (v) {
-        if (v == 'ADD_NEW' && addCategory != null) {
-          _addNewMetadata(addCategory, displayAddText);
-        } else {
-          onChanged(v);
-        }
-      },
+      onChanged: (v) { if (v == 'ADD_NEW' && addCategory != null) { _addNewMetadata(addCategory, displayAddText); } else { onChanged(v); } },
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-
+    if (_isLoading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
     final theme = Theme.of(context);
 
     return GestureDetector(
@@ -302,9 +261,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: Text(widget.editData == null ? 'အိမ်ခြံမြေ အသစ်ထည့်ရန်' : 'အိမ်ခြံမြေ ပြင်ဆင်ရန်', style: const TextStyle(fontSize: 18)),
-          actions: [
-            if (_isSaving) const Padding(padding: EdgeInsets.all(16.0), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
-          ],
+          actions: [ if (_isSaving) const Padding(padding: EdgeInsets.all(16.0), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))) ],
         ),
         body: Form(
           key: _formKey,
@@ -314,54 +271,21 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
             children: [
               _buildTextField(_titleCtrl, 'ခေါင်းစဉ် *', fontSize: 14, isRequired: true),
               const SizedBox(height: 16),
-              
               _buildDropdown('အမျိုးအစား', _propertyType, _propertyTypes, (v) => setState(() => _propertyType = v!), fontSize: 14),
               const SizedBox(height: 16),
-
-              Row(
-                children: [
-                  Expanded(child: _buildTextField(_askingPriceCtrl, 'ခေါ်ဈေး(သိန်း)', isNumber: true)),
-                  const SizedBox(width: 12),
-                  Expanded(child: _buildTextField(_bottomPriceCtrl, 'အောက်ဆုံး(သိန်း)', isNumber: true)),
-                ],
-              ),
+              Row(children: [ Expanded(child: _buildTextField(_askingPriceCtrl, 'ခေါ်ဈေး(သိန်း)', isNumber: true)), const SizedBox(width: 12), Expanded(child: _buildTextField(_bottomPriceCtrl, 'အောက်ဆုံး(သိန်း)', isNumber: true)) ]),
               const SizedBox(height: 16),
-
               _buildDropdown('Status', _status, _statusList, (v) => setState(() => _status = v!), fontSize: 14),
               const SizedBox(height: 24),
-
               const Text('အကျယ်အဝန်း (ပေ)', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 13)),
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(child: _buildTextField(_eastCtrl, 'အရှေ့', isNumber: true)),
-                  const SizedBox(width: 8),
-                  Expanded(child: _buildTextField(_westCtrl, 'အနောက်', isNumber: true)),
-                  const SizedBox(width: 8),
-                  Expanded(child: _buildTextField(_southCtrl, 'တောင်', isNumber: true)),
-                  const SizedBox(width: 8),
-                  Expanded(child: _buildTextField(_northCtrl, 'မြောက်', isNumber: true)),
-                ],
-              ),
+              Row(children: [ Expanded(child: _buildTextField(_eastCtrl, 'အရှေ့', isNumber: true)), const SizedBox(width: 8), Expanded(child: _buildTextField(_westCtrl, 'အနောက်', isNumber: true)), const SizedBox(width: 8), Expanded(child: _buildTextField(_southCtrl, 'တောင်', isNumber: true)), const SizedBox(width: 8), Expanded(child: _buildTextField(_northCtrl, 'မြောက်', isNumber: true)) ]),
               const SizedBox(height: 16),
-
               _buildDropdown('မြို့နယ်/တည်နေရာ', _locationId, _locations, (v) => setState(() => _locationId = v), addCategory: 'location', addTextLabel: 'မြို့နယ်/တည်နေရာ အသစ်ထည့်မည်', fontSize: 14),
               const SizedBox(height: 16),
-
-              Row(
-                children: [
-                  Expanded(child: _buildDropdown('လမ်းအမျိုးအစား', _roadType, _roadTypes, (v) => setState(() => _roadType = v), addCategory: 'road_type', addTextLabel: 'လမ်း အသစ်ထည့်မည်')),
-                  const SizedBox(width: 12),
-                  Expanded(child: _buildDropdown('မြေအမျိုးအစား', _landType, _landTypes, (v) => setState(() => _landType = v), addCategory: 'land_type', addTextLabel: 'မြေ အသစ်ထည့်မည်')),
-                ],
-              ),
+              Row(children: [ Expanded(child: _buildDropdown('လမ်းအမျိုးအစား', _roadType, _roadTypes, (v) => setState(() => _roadType = v), addCategory: 'road_type', addTextLabel: 'လမ်း အသစ်ထည့်မည်')), const SizedBox(width: 12), Expanded(child: _buildDropdown('မြေအမျိုးအစား', _landType, _landTypes, (v) => setState(() => _landType = v), addCategory: 'land_type', addTextLabel: 'မြေ အသစ်ထည့်မည်')) ]),
               const SizedBox(height: 16),
-
-              if (_propertyType == 'အိမ်အပါ') ...[
-                _buildDropdown('အိမ်အမျိုးအစား', _houseType, _houseTypes, (v) => setState(() => _houseType = v), addCategory: 'house_type', addTextLabel: 'အိမ် အသစ်ထည့်မည်', fontSize: 14),
-                const SizedBox(height: 16),
-              ],
-
+              if (_propertyType == 'အိမ်အပါ') ...[ _buildDropdown('အိမ်အမျိုးအစား', _houseType, _houseTypes, (v) => setState(() => _houseType = v), addCategory: 'house_type', addTextLabel: 'အိမ် အသစ်ထည့်မည်', fontSize: 14), const SizedBox(height: 16) ],
               const Text('ပိုင်ရှင်အချက်အလက်', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 13)),
               const SizedBox(height: 8),
               LayoutBuilder(
@@ -372,8 +296,7 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
                     final query = textEditingValue.text.trim();
                     if (query.isEmpty) return const Iterable<Map<String, dynamic>>.empty();
                     final matches = _owners.where((o) => (o['name'] ?? '').toLowerCase().contains(query.toLowerCase())).toList();
-                    matches.add({'id': '__ADD_NEW__', 'name': query});
-                    return matches;
+                    matches.add({'id': '__ADD_NEW__', 'name': query}); return matches;
                   },
                   onSelected: (option) async {
                     if (option['id'] == '__ADD_NEW__') {
@@ -383,141 +306,50 @@ class _PropertyFormScreenState extends State<PropertyFormScreen> {
                         setState(() => _isLoading = true);
                         await _loadMetadata();
                         final newOwner = _owners.firstWhere((o) => o['name'] == option['name'], orElse: () => {});
-                        if (newOwner.isNotEmpty) {
-                          setState(() {
-                            _ownerId = newOwner['id'];
-                            _ownerSearchCtrl.text = newOwner['name'];
-                            _isLoading = false;
-                          });
-                        } else {
-                          setState(() => _isLoading = false);
-                        }
+                        if (newOwner.isNotEmpty) { setState(() { _ownerId = newOwner['id']; _ownerSearchCtrl.text = newOwner['name']; _isLoading = false; }); } else { setState(() => _isLoading = false); }
                       }
-                    } else {
-                      setState(() {
-                        _ownerId = option['id'];
-                        _ownerSearchCtrl.text = option['name'];
-                      });
-                    }
+                    } else { setState(() { _ownerId = option['id']; _ownerSearchCtrl.text = option['name']; }); }
                   },
                   optionsViewBuilder: (context, onSelected, options) {
-                    return Align(
-                      alignment: Alignment.topLeft,
-                      child: Material(
-                        elevation: 4,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(maxHeight: 250, maxWidth: constraints.maxWidth),
-                          child: ListView.builder(
-                            padding: EdgeInsets.zero,
-                            shrinkWrap: true,
-                            itemCount: options.length,
-                            itemBuilder: (context, index) {
-                              final option = options.elementAt(index);
-                              if (option['id'] == '__ADD_NEW__') {
-                                return ListTile(
-                                  leading: Icon(Icons.add, color: theme.colorScheme.primary),
-                                  title: Text('"${option['name']}" ကို အသစ်ထည့်မည်', style: TextStyle(color: theme.colorScheme.primary, fontSize: 13, fontWeight: FontWeight.w600)),
-                                  onTap: () => onSelected(option),
-                                );
-                              }
-                              return ListTile(
-                                leading: const Icon(Icons.person, size: 20),
-                                title: Text(option['name'] ?? ''),
-                                subtitle: Text(option['phones'] ?? 'ဖုန်းမရှိပါ', style: const TextStyle(fontSize: 12)),
-                                onTap: () => onSelected(option),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                    );
+                    return Align(alignment: Alignment.topLeft, child: Material(elevation: 4, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), child: ConstrainedBox(constraints: BoxConstraints(maxHeight: 250, maxWidth: constraints.maxWidth), child: ListView.builder(padding: EdgeInsets.zero, shrinkWrap: true, itemCount: options.length, itemBuilder: (context, index) {
+                      final option = options.elementAt(index);
+                      if (option['id'] == '__ADD_NEW__') return ListTile(leading: Icon(Icons.add, color: theme.colorScheme.primary), title: Text('"${option['name']}" ကို အသစ်ထည့်မည်', style: TextStyle(color: theme.colorScheme.primary, fontSize: 13, fontWeight: FontWeight.w600)), onTap: () => onSelected(option));
+                      return ListTile(leading: const Icon(Icons.person, size: 20), title: Text(option['name'] ?? ''), subtitle: Text(option['phones'] ?? 'ဖုန်းမရှိပါ', style: const TextStyle(fontSize: 12)), onTap: () => onSelected(option));
+                    }))));
                   },
-                  fieldViewBuilder: (context, controller, node, onSubmitted) {
-                    return TextFormField(
-                      controller: controller,
-                      focusNode: node,
-                      style: const TextStyle(fontSize: 14),
-                      decoration: InputDecoration(
-                        labelText: 'ပိုင်ရှင်ရှာရန် (သို့) အသစ်ရိုက်ထည့်ပါ',
-                        prefixIcon: const Icon(Icons.person_search, size: 20),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                        isDense: true,
-                        suffixIcon: _ownerId != null ? IconButton(icon: const Icon(Icons.clear, size: 18), onPressed: () { setState(() { _ownerId = null; controller.clear(); }); }) : null,
-                      ),
-                    );
-                  },
+                  fieldViewBuilder: (context, controller, node, onSubmitted) { return TextFormField(controller: controller, focusNode: node, style: const TextStyle(fontSize: 14), decoration: InputDecoration(labelText: 'ပိုင်ရှင်ရှာရန် (သို့) အသစ်ရိုက်ထည့်ပါ', prefixIcon: const Icon(Icons.person_search, size: 20), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), isDense: true, suffixIcon: _ownerId != null ? IconButton(icon: const Icon(Icons.clear, size: 18), onPressed: () { setState(() { _ownerId = null; controller.clear(); }); }) : null)); },
                 ),
               ),
               const SizedBox(height: 16),
-
-              // ⚠️ Map Link မရှိပါကလည်း Google Maps ကို တိုက်ရိုက်ဖွင့်ပေးမည့် စနစ်
-              _buildTextField(
-                _mapLinkCtrl, 
-                'Google Map Link (Optional)', 
-                fontSize: 14,
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.map, color: Colors.blue),
-                  onPressed: () async {
-                    final url = _mapLinkCtrl.text.trim();
-                    // Link အမှန်ဖြစ်လျှင် ၎င်းကိုဖွင့်မည်၊ မဟုတ်လျှင် Map App ကို အလွတ်ဖွင့်မည်
-                    final uri = url.isNotEmpty && (url.startsWith('http://') || url.startsWith('https://'))
-                        ? Uri.parse(url) 
-                        : Uri.parse('https://www.google.com/maps'); 
-                    
-                    try {
-                      await launchUrl(uri, mode: LaunchMode.externalApplication);
-                    } catch (e) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Map ဖွင့်၍ မရပါ')));
-                      }
-                    }
-                  },
-                ),
-              ),
+              _buildTextField(_mapLinkCtrl, 'Google Map Link (Optional)', fontSize: 14, suffixIcon: IconButton(icon: const Icon(Icons.map, color: Colors.blue), onPressed: () async {
+                final url = _mapLinkCtrl.text.trim();
+                final uri = url.isNotEmpty && (url.startsWith('http://') || url.startsWith('https://')) ? Uri.parse(url) : Uri.parse('https://www.google.com/maps'); 
+                try { await launchUrl(uri, mode: LaunchMode.externalApplication); } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Map ဖွင့်၍ မရပါ'))); }
+              })),
               const SizedBox(height: 16),
-
-              TextFormField(
-                controller: _remarkCtrl,
-                maxLines: 3,
-                style: const TextStyle(fontSize: 14),
-                decoration: InputDecoration(labelText: 'မှတ်ချက်', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
-              ),
+              TextFormField(controller: _remarkCtrl, maxLines: 3, style: const TextStyle(fontSize: 14), decoration: InputDecoration(labelText: 'မှတ်ချက်', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)))),
               const SizedBox(height: 24),
-
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('ဓာတ်ပုံများ', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-                  TextButton.icon(onPressed: _showImagePickerOptions, icon: const Icon(Icons.add_a_photo, size: 18), label: const Text('ထည့်မည်')),
-                ],
-              ),
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [ const Text('ဓာတ်ပုံများ', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)), TextButton.icon(onPressed: _showImagePickerOptions, icon: const Icon(Icons.add_a_photo, size: 18), label: const Text('ထည့်မည်')) ]),
+              
               if (_photos.isNotEmpty)
                 SizedBox(
                   height: 100,
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
                     itemCount: _photos.length,
-                    itemBuilder: (ctx, i) => Stack(
-                      children: [
-                        Container(margin: const EdgeInsets.only(right: 8), width: 100, decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), image: DecorationImage(image: _photos[i].startsWith('http') ? NetworkImage(_photos[i]) : FileImage(File(_photos[i])) as ImageProvider, fit: BoxFit.cover))),
-                        Positioned(top: 4, right: 12, child: InkWell(onTap: () => setState(() => _photos.removeAt(i)), child: Container(padding: const EdgeInsets.all(2), decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle), child: const Icon(Icons.close, size: 14, color: Colors.white)))),
-                      ],
-                    ),
-                  ),
-                ),
-              
-              const SizedBox(height: 32),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 50), backgroundColor: const Color(0xFF2E6561), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                onPressed: _isSaving ? null : _saveProperty,
-                child: const Text('သိမ်းဆည်းမည်', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              ),
-              const SizedBox(height: 32),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
+                    itemBuilder: (ctx, i) {
+                      final isUrl = _photos[i].startsWith('http');
+                      return FutureBuilder<Directory>(
+                        future: getApplicationDocumentsDirectory(),
+                        builder: (context, snapshot) {
+                          ImageProvider? imageProvider;
+                          if (isUrl) {
+                            imageProvider = NetworkImage(_photos[i]);
+                          } else if (snapshot.hasData) {
+                            final file = File('${snapshot.data!.path}/property_photos/${_photos[i]}');
+                            if (file.existsSync()) imageProvider = FileImage(file);
+                          }
+
+                          return Stack(
+                            children: [
+                      
