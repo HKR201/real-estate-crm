@@ -160,4 +160,14 @@ class DatabaseHelper {
       conflictAlgorithm: ConflictAlgorithm.ignore
     );
   }
+    // ================= METADATA DELETE (အမျိုးအစားများ ဖျက်ရန်) =================
+  Future<int> deleteMetadata(String category, String value) async {
+    final db = await instance.database;
+    // သက်ဆိုင်ရာ Category နှင့် Value ကိုက်ညီသော စာကြောင်းကိုသာ ဖျက်မည်
+    return await db.delete(
+      'crm_metadata',
+      where: 'category = ? AND value = ?',
+      whereArgs: [category, value],
+    );
+  }
 }
